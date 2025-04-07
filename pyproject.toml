@@ -1,0 +1,89 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel>=0.41.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oarc-rag"
+version = "0.1.0"
+description = "A modular RAG (Retrieval-Augmented Generation) system for flexible integration with AI applications"
+readme = "README.md"
+requires-python = ">=3.9, <3.12"
+license = {text = "Apache 2.0"}
+authors = [
+    {name = "K. Rawson", email = "rawsonkara@gmail.com"}
+]
+maintainers = [
+    {name = "K. Rawson", email = "rawsonkara@gmail.com"}
+]
+keywords = ["rag", "retrieval-augmented-generation", "llm", "vector-database", "ai"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+
+# Only RAG-related dependencies
+dependencies = [
+    # Core dependencies
+    "requests>=2.32.3", # web requests and API calls
+    "ollama>=0.4.7", # Ollama API client library
+    "asyncio>=3.4.3", # asynchronous operations
+    "numpy>=2.2.4", # vector operations
+    "pandas>=2.2.3", # data manipulation and analysis
+    "tenacity>=9.1.2", # retrying operations with exponential backoff
+    "tqdm>=4.67.1", # progress bar for long-running tasks
+    # Machine learning
+    "scikit-learn>=1.6.1", # vector operations and ML utilities
+    "faiss-cpu>=1.10.0", # vector search
+    # RAG and LLMs
+    "llama-index>=0.12.28", # RAG framework
+    "llama-index-readers-json>=0.3.0", # JSON reader for LlamaIndex
+    "llama-index-experimental>=0.5.4", # Experimental features
+    "langchain>=0.3.23", # text chunking and RAG pipelines
+    "langchain-community>=0.3.21", # community-contributed modules
+    "langchain-ollama>=0.3.0", # LangChain integration with Ollama
+    "tiktoken>=0.9.0", # token counting
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-cov>=6.1.1",
+    "mock>=5.2.0",
+    "pytest-timeout>=2.3.1",
+    "pytest-xdist>=3.6.1",
+    "flake8>=7.2.0",
+    "mypy>=1.15.0"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/yourusername/oarc-rag"
+"Bug Tracker" = "https://github.com/yourusername/oarc-rag/issues"
+"Repository" = "https://github.com/yourusername/oarc-rag.git"
+
+[project.scripts]
+oarc-rag = "oarc_rag.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["oarc_rag"]
+include-package-data = true
+zip-safe = false
+
+[tool.mypy]
+python_version = ">3.8, < 3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "setup.py",
+]
