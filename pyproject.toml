@@ -38,7 +38,7 @@ dependencies = [
     "tqdm>=4.67.1", # progress bar for long-running tasks
     # Machine learning
     "scikit-learn>=1.6.1", # vector operations and ML utilities
-    "faiss-cpu>=1.10.0", # vector search
+    "scipy>=1.15.2",
     # RAG and LLMs
     "llama-index>=0.12.28", # RAG framework
     "llama-index-readers-json>=0.3.0", # JSON reader for LlamaIndex
