@@ -3,7 +3,7 @@ Factory pattern implementation as a class decorator.
 
 This module provides a simple decorator to add factory pattern functionality to classes.
 """
-from typing import Any, Type, TypeVar, Dict, Optional, Callable
+from typing import Any, Type, TypeVar
 
 # Type variable for generic typing
 T = TypeVar('T')

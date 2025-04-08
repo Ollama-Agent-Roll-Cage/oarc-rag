@@ -3,8 +3,7 @@ Dependency management utilities for oarc_rag.
 """
 import sys
 import subprocess
-from pathlib import Path
-from typing import Tuple, Dict, Optional, List
+from typing import Tuple, Dict, Optional
 
 from oarc_rag.utils.log import log
 from oarc_rag.utils.decorators.singleton import singleton
@@ -101,8 +100,8 @@ class DependencyManager:
         except Exception as e:
             return False, f"Failed to upgrade faiss: {e}"
 
-    @classmethod
-    def check_deps(cls) -> Dict[str, Dict[str, any]]:
+    @staticmethod
+    def check_deps() -> Dict[str, Dict[str, any]]:
         """Check and optimize all dependencies."""
         results = {
             "cuda": {"status": False, "message": "", "action_taken": False},
@@ -110,10 +109,10 @@ class DependencyManager:
         }
 
         # Check CUDA
-        cuda_capable, cuda_info = cls.check_cuda_capability()
+        cuda_capable, cuda_info = DependencyManager.check_cuda_capability()
         if cuda_capable:
-            if not cls._is_cuda_installed():
-                success, message = cls.install_cuda_toolkit()
+            if not DependencyManager._is_cuda_installed():
+                success, message = DependencyManager.install_cuda_toolkit()
                 results["cuda"] = {
                     "status": success,
                     "message": message,
@@ -127,8 +126,8 @@ class DependencyManager:
                 }
 
         # Check Faiss
-        if cuda_capable and not cls._is_faiss_gpu_installed():
-            success, message = cls.upgrade_faiss()
+        if cuda_capable and not DependencyManager._is_faiss_gpu_installed():
+            success, message = DependencyManager.upgrade_faiss()
             results["faiss"] = {
                 "status": success,
                 "message": message,
@@ -136,8 +135,8 @@ class DependencyManager:
             }
         else:
             results["faiss"] = {
-                "status": cls._is_faiss_gpu_installed(),
-                "message": "faiss-gpu already installed" if cls._is_faiss_gpu_installed() else "faiss-cpu in use",
+                "status": DependencyManager._is_faiss_gpu_installed(),
+                "message": "faiss-gpu already installed" if DependencyManager._is_faiss_gpu_installed() else "faiss-cpu in use",
                 "action_taken": False
             }
 

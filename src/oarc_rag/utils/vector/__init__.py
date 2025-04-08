@@ -1,8 +1,6 @@
 """
 Vector operations and utilities.
 """
-import numpy as np
-
 from oarc_rag.utils.log import log
 from oarc_rag.utils.deps import DependencyManager
 

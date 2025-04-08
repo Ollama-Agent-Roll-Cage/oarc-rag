@@ -2,7 +2,7 @@
 Singleton decorator for ensuring only one instance of a class exists.
 """
 import functools
-from typing import Any, Dict, Type, TypeVar, cast
+from typing import Any, Dict, Type, TypeVar
 
 from oarc_rag.utils.log import log
 
@@ -49,7 +49,25 @@ def singleton(cls: Type[T]) -> Type[T]:
             if self.__class__.__name__ != "PromptTemplate":
                 log.debug(f"Reusing existing singleton instance of {signature}")
     
+    @classmethod
+    def reset(cls, *args, **kwargs):
+        """
+        Reset the singleton instance, creating a new one on next access.
+        
+        This is primarily useful for testing or when configuration needs to be
+        completely refreshed at runtime.
+        
+        Args:
+            *args: Arguments to pass to the constructor on next instantiation
+            **kwargs: Keyword arguments to pass to the constructor on next instantiation
+        """
+        if cls in _instances:
+            del _instances[cls]
+            log.debug(f"Reset singleton instance of {cls.__name__}")
+        return cls(*args, **kwargs)
+    
     cls.__new__ = __new__
     cls.__init__ = __init__
+    cls.reset = reset
     
     return cls
