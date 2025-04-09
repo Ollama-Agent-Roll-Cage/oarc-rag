@@ -48,6 +48,8 @@ This document outlines the design, architecture, and implementation plan for an 
   - [4.4 Ollama Integration Testing](#44-ollama-integration-testing)
   - [4.5 Continuous Integration](#45-continuous-integration)
   - [4.6 Code Coverage](#46-code-coverage)
+- [4.7 Testing Challenges and Solutions](#47-testing-challenges-and-solutions)
+  - [4.8 Test-Driven Development Approach](#48-test-driven-development-approach)
 - [5. Future Considerations](#5-future-considerations)
 - [6. Conclusion](#6-conclusion)
 - [7. Best Practices](#7-best-practices)
@@ -75,6 +77,11 @@ This document outlines the design, architecture, and implementation plan for an 
   - [10.3 Project Structure](#103-project-structure)
     - [10.3.1 Codebase Organization](#1031-codebase-organization)
     - [10.3.2 Key Modules](#1032-key-modules)
+- [11. Implementation Risks and Mitigations](#11-implementation-risks-and-mitigations)
+  - [11.1 Technical Risks](#111-technical-risks)
+  - [11.2 Process Risks](#112-process-risks)
+- [12. Success Metrics](#12-success-metrics)
+- [13. Frequently Asked Questions](#13-frequently-asked-questions)
 
 ---
 
@@ -498,7 +505,265 @@ This structure ensures:
 - Comprehensive metadata for filtering and context enrichment
 - Performance optimization through in-memory operations
 
----
+
+### 2.4 Data Storage and Query Layer
+- **Primary Storage:**
+  - Utilize pandas DataFrames for lightweight, in-memory storage of embeddings, metadata (e.g., backlinks, usage frequency), and processed blocks.
+- **Persistence Strategy:**
+  - Implement hybrid persistence using both Parquet and Arrow formats:
+    - **Parquet Files:** For long-term storage of large datasets with efficient compression.
+    - **Arrow Files:** For high-performance data interchange and memory-mapping capabilities.
+  - Automatically select optimal format based on data characteristics and usage patterns.
+- **Pandas Query Engine:**
+  - Interpret natural language queries, map them to DataFrame operations, and execute complex filtering/join queries to retrieve relevant blocks.
+
+#### 2.4.1 Vector Database System
+
+The Vector Database system provides efficient storage and retrieval of embeddings for RAG functionality:
+
+```mermaid
+%%{init: {
+    'theme': 'dark',
+    'themeVariables': {
+        'background': 'transparent',
+        'primaryColor': '#ffffff',
+        'primaryTextColor': '#ffffff',
+        'primaryBorderColor': '#ffffff',
+        'lineColor': '#ffffff',
+        'fontSize': '16px',
+        'fontFamily': 'arial'
+    }
+}}%%
+
+flowchart TD
+    %% Vector Database System - optimized layout without subgraphs
+    classDef data stroke:#fff,stroke-width:1px,stroke-dasharray:3 3,color:#fff
+    classDef dataFlow stroke:#fff,stroke-width:1px,stroke-dasharray:5 5,color:#fff
+    classDef storage stroke:#fff,stroke-width:2px,color:#fff
+    classDef index stroke:#fff,stroke-width:2px,stroke-dasharray:10 5,color:#fff
+
+    %% Input flow
+    Input[Document Text] -->|Chunking| Chunks
+    Chunks[Text Chunks] -->|Embedding| Vectors
+    Vectors[Vector Embeddings] -->|Add to DB| DataFrame
+    Vectors -->|Dimensionality Reduction| ReducedVectors[PCA Reduced Vectors]
+    ReducedVectors -->|Index Building| FastIndex
+    
+    %% Database components
+    DataFrame[In-Memory DataFrame]:::data
+    DocTable[Document Metadata]:::storage
+    ChunkTable[Chunk Data]:::storage
+    VectorTable[Vector Data]:::storage
+    FastIndex[Fast Index Table]:::index
+    
+    %% Query components
+    QueryVector[Query Vector] -->|Dimension Reduction| ReducedQuery[Reduced Query Vector]
+    ReducedQuery -->|First-pass Search| CandidateSet[Candidate Set]
+    CandidateSet -->|Full-dimension Refinement| Ranking
+    QueryVector -.->|Optional Direct Search| Search
+    Search[Full Vector Search]:::dataFlow --> Filter
+    Filter[Source Filter]:::dataFlow --> Ranking
+    Ranking[Result Ranking]:::dataFlow --> Results
+    Results[Ranked Results]
+    
+    %% Connections between components
+    DataFrame <--> DocTable <-->|References| ChunkTable
+    ChunkTable <-->|References| VectorTable
+    DataFrame <--> Search
+    VectorTable -.->|Builds| FastIndex
+    FastIndex --> CandidateSet
+```
+
+**Core Features:**
+
+- **Document Management:** Add, retrieve, and remove document chunks with automatic deduplication
+- **Vector Search:** Efficient cosine similarity search with configurable threshold and ranking
+- **PCA-Optimized Indexing:** Fast approximate search using dimensionality reduction and specialized index structures
+- **Two-Tier Search:** Rapid candidate selection with reduced dimensions followed by precision ranking with full vectors
+- **Source Filtering:** Filter results by document source or metadata attributes
+- **Metadata Support:** Store and retrieve arbitrary metadata associated with documents
+- **Statistics and Monitoring:** Track database metrics including document count, chunk statistics, and embedding dimension information
+
+The VectorDatabase integrates with the broader RAG system:
+- Coordinated by RAGEngine for document processing and retrieval
+- Receives vectors from EmbeddingGenerator
+- Works with TextChunker for document preparation
+- Provides results to ContextAssembler for prompt enhancement
+
+**Implementation Example:**
+```python
+# Using the VectorDatabase with PCA optimization
+db = VectorDatabase(use_pca_optimization=True, pca_dimensions=128)
+
+# Add document chunks with metadata
+chunk_ids = db.add_document(
+    text_chunks=["Content chunk 1", "Content chunk 2"],
+    vectors=[[0.1, 0.2, ...], [0.3, 0.4, ...]],  # Original high-dim vectors
+    metadata={"source": "documentation"},
+    source="guide.md"
+)
+
+# Search with tiered approach (PCA first, then full vector refinement)
+results = db.search(
+    query_vector=[0.15, 0.25, ...],
+    top_k=3,
+    threshold=0.7,
+    source_filter=["documentation"],
+    use_fast_index=True  # Enables PCA-based fast indexing
+)
+```
+
+#### 2.4.2 Database Schema
+
+The in-memory database structure for vector storage includes:
+
+| Field | Type | Description |
+|-------|------|-------------| 
+| `doc_id` | String | Unique document identifier |
+| `chunk_id` | String | Unique chunk identifier |
+| `text` | String | Original text content |
+| `source` | String | Document source identifier |
+| `metadata` | JSON | Encoded metadata for the chunk |
+| `embedding` | Array | Full vector embedding as numpy array |
+| `reduced_embedding` | Array | PCA-reduced vector for fast indexing |
+| `timestamp` | DateTime | When the entry was created |
+
+This structure ensures:
+- Efficient storage and retrieval of vector embeddings
+- Linkage between documents, chunks, and their embeddings
+- Fast approximate search capabilities through dimensionality reduction
+- Comprehensive metadata for filtering and context enrichment
+- Performance optimization through in-memory operations
+--
+### 2.4 Data Storage and Query Layer
+- **Primary Storage:**
+  - Utilize pandas DataFrames for lightweight, in-memory storage of embeddings, metadata (e.g., backlinks, usage frequency), and processed blocks.
+- **Persistence Strategy:**
+  - Implement hybrid persistence using both Parquet and Arrow formats:
+    - **Parquet Files:** For long-term storage of large datasets with efficient compression.
+    - **Arrow Files:** For high-performance data interchange and memory-mapping capabilities.
+  - Automatically select optimal format based on data characteristics and usage patterns.
+- **Pandas Query Engine:**
+  - Interpret natural language queries, map them to DataFrame operations, and execute complex filtering/join queries to retrieve relevant blocks.
+
+#### 2.4.1 Vector Database System
+
+The Vector Database system provides efficient storage and retrieval of embeddings for RAG functionality:
+
+```mermaid
+%%{init: {
+    'theme': 'dark',
+    'themeVariables': {
+        'background': 'transparent',
+        'primaryColor': '#ffffff',
+        'primaryTextColor': '#ffffff',
+        'primaryBorderColor': '#ffffff',
+        'lineColor': '#ffffff',
+        'fontSize': '16px',
+        'fontFamily': 'arial'
+    }
+}}%%
+
+flowchart TD
+    %% Vector Database System - optimized layout without subgraphs
+    classDef data stroke:#fff,stroke-width:1px,stroke-dasharray:3 3,color:#fff
+    classDef dataFlow stroke:#fff,stroke-width:1px,stroke-dasharray:5 5,color:#fff
+    classDef storage stroke:#fff,stroke-width:2px,color:#fff
+    classDef index stroke:#fff,stroke-width:2px,stroke-dasharray:10 5,color:#fff
+
+    %% Input flow
+    Input[Document Text] -->|Chunking| Chunks
+    Chunks[Text Chunks] -->|Embedding| Vectors
+    Vectors[Vector Embeddings] -->|Add to DB| DataFrame
+    Vectors -->|Dimensionality Reduction| ReducedVectors[PCA Reduced Vectors]
+    ReducedVectors -->|Index Building| FastIndex
+    
+    %% Database components
+    DataFrame[In-Memory DataFrame]:::data
+    DocTable[Document Metadata]:::storage
+    ChunkTable[Chunk Data]:::storage
+    VectorTable[Vector Data]:::storage
+    FastIndex[Fast Index Table]:::index
+    
+    %% Query components
+    QueryVector[Query Vector] -->|Dimension Reduction| ReducedQuery[Reduced Query Vector]
+    ReducedQuery -->|First-pass Search| CandidateSet[Candidate Set]
+    CandidateSet -->|Full-dimension Refinement| Ranking
+    QueryVector -.->|Optional Direct Search| Search
+    Search[Full Vector Search]:::dataFlow --> Filter
+    Filter[Source Filter]:::dataFlow --> Ranking
+    Ranking[Result Ranking]:::dataFlow --> Results
+    Results[Ranked Results]
+    
+    %% Connections between components
+    DataFrame <--> DocTable <-->|References| ChunkTable
+    ChunkTable <-->|References| VectorTable
+    DataFrame <--> Search
+    VectorTable -.->|Builds| FastIndex
+    FastIndex --> CandidateSet
+```
+
+**Core Features:**
+
+- **Document Management:** Add, retrieve, and remove document chunks with automatic deduplication
+- **Vector Search:** Efficient cosine similarity search with configurable threshold and ranking
+- **PCA-Optimized Indexing:** Fast approximate search using dimensionality reduction and specialized index structures
+- **Two-Tier Search:** Rapid candidate selection with reduced dimensions followed by precision ranking with full vectors
+- **Source Filtering:** Filter results by document source or metadata attributes
+- **Metadata Support:** Store and retrieve arbitrary metadata associated with documents
+- **Statistics and Monitoring:** Track database metrics including document count, chunk statistics, and embedding dimension information
+
+The VectorDatabase integrates with the broader RAG system:
+- Coordinated by RAGEngine for document processing and retrieval
+- Receives vectors from EmbeddingGenerator
+- Works with TextChunker for document preparation
+- Provides results to ContextAssembler for prompt enhancement
+
+**Implementation Example:**
+```python
+# Using the VectorDatabase with PCA optimization
+db = VectorDatabase(use_pca_optimization=True, pca_dimensions=128)
+
+# Add document chunks with metadata
+chunk_ids = db.add_document(
+    text_chunks=["Content chunk 1", "Content chunk 2"],
+    vectors=[[0.1, 0.2, ...], [0.3, 0.4, ...]],  # Original high-dim vectors
+    metadata={"source": "documentation"},
+    source="guide.md"
+)
+
+# Search with tiered approach (PCA first, then full vector refinement)
+results = db.search(
+    query_vector=[0.15, 0.25, ...],
+    top_k=3,
+    threshold=0.7,
+    source_filter=["documentation"],
+    use_fast_index=True  # Enables PCA-based fast indexing
+)
+```
+
+#### 2.4.2 Database Schema
+
+The in-memory database structure for vector storage includes:
+
+| Field | Type | Description |
+|-------|------|-------------| 
+| `doc_id` | String | Unique document identifier |
+| `chunk_id` | String | Unique chunk identifier |
+| `text` | String | Original text content |
+| `source` | String | Document source identifier |
+| `metadata` | JSON | Encoded metadata for the chunk |
+| `embedding` | Array | Full vector embedding as numpy array |
+| `reduced_embedding` | Array | PCA-reduced vector for fast indexing |
+| `timestamp` | DateTime | When the entry was created |
+
+This structure ensures:
+- Efficient storage and retrieval of vector embeddings
+- Linkage between documents, chunks, and their embeddings
+- Fast approximate search capabilities through dimensionality reduction
+- Comprehensive metadata for filtering and context enrichment
+- Performance optimization through in-memory operations
+-
 
 ## 3. Implementation Plan
 
