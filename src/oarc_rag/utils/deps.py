@@ -68,44 +68,10 @@ class DependencyManager:
             return False, f"Failed to install CUDA toolkit: {e}"
 
     @staticmethod
-    def upgrade_faiss() -> Tuple[bool, str]:
-        """Upgrade faiss-cpu to faiss-gpu if possible."""
-        cuda_capable, _ = DependencyManager.check_cuda_capability()
-        if not cuda_capable:
-            return False, "No CUDA capable device detected"
-
-        try:
-            # Uninstall faiss-cpu if present
-            subprocess.run(
-                [sys.executable, "-m", "pip", "uninstall", "-y", "faiss-cpu"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            
-            # Install faiss-gpu
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "faiss-gpu"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            
-            if result.returncode == 0:
-                # Verify installation
-                import faiss
-                if hasattr(faiss, 'StandardGpuResources'):
-                    return True, "Successfully upgraded to faiss-gpu"
-                    
-            return False, "Failed to verify faiss-gpu installation"
-        except Exception as e:
-            return False, f"Failed to upgrade faiss: {e}"
-
-    @staticmethod
     def check_deps() -> Dict[str, Dict[str, any]]:
         """Check and optimize all dependencies."""
         results = {
-            "cuda": {"status": False, "message": "", "action_taken": False},
-            "faiss": {"status": False, "message": "", "action_taken": False}
+            "cuda": {"status": False, "message": "", "action_taken": False}
         }
 
         # Check CUDA
@@ -125,21 +91,6 @@ class DependencyManager:
                     "action_taken": False
                 }
 
-        # Check Faiss
-        if cuda_capable and not DependencyManager._is_faiss_gpu_installed():
-            success, message = DependencyManager.upgrade_faiss()
-            results["faiss"] = {
-                "status": success,
-                "message": message,
-                "action_taken": True
-            }
-        else:
-            results["faiss"] = {
-                "status": DependencyManager._is_faiss_gpu_installed(),
-                "message": "faiss-gpu already installed" if DependencyManager._is_faiss_gpu_installed() else "faiss-cpu in use",
-                "action_taken": False
-            }
-
         return results
 
     @staticmethod
@@ -148,14 +99,5 @@ class DependencyManager:
         try:
             import torch
             return torch.cuda.is_available()
-        except ImportError:
-            return False
-
-    @staticmethod
-    def _is_faiss_gpu_installed() -> bool:
-        """Check if faiss-gpu is installed and working."""
-        try:
-            import faiss
-            return hasattr(faiss, 'StandardGpuResources')
         except ImportError:
             return False

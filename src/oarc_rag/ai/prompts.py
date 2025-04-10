@@ -1,38 +1,44 @@
 """
-Prompt templates for RAG generation.
+Prompt templates for domain-agnostic RAG generation.
 
-This module provides advanced templating capabilities for AI prompts,
-supporting template loading, formatting, validation, and versioning.
+This module provides advanced templating capabilities for AI prompts using Jinja2,
+supporting template loading, formatting, validation and versioning.
+Templates are designed to work across any domain, not tied to specific applications.
 """
 import json
 import re
+import os
 from pathlib import Path
-from string import Template
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 
+import jinja2
+from jinja2 import Environment, FileSystemLoader, select_autoescape, BaseLoader, Template
 from llama_index.experimental.query_engine import PandasQueryEngine
+
 from oarc_rag.utils.decorators.singleton import singleton
 from oarc_rag.utils.log import log
+from oarc_rag.utils.config.config import Config
+from oarc_rag.core.cache import cache_manager, TemplateCache
 
 
 @singleton
-class PromptTemplate:
+class PromptTemplateManager:
     """
-    Class for managing prompt templates for AI generation.
+    Class for managing prompt templates for AI generation using Jinja2.
     """
     
     # Template for system context in RAG conversations
     RAG_SYSTEM_TEMPLATE = """
     You are an AI assistant equipped with a retrieval-augmented generation (RAG) system.
-    You can access relevant documents and data for questions on ${domain}.
+    You can access relevant documents and data to answer questions about any topic.
     
     When responding:
-    - Use retrieved context to inform your answers when available
+    - Use the retrieved context to inform your answers when available
     - Cite sources when information comes from specific documents
     - Acknowledge when you're unsure or when the retrieval system doesn't provide relevant information
-    - Present structured data in a clear, formatted way
+    - Present information in a clear, structured way
     - Focus on giving accurate, helpful information based on the provided context
-    - Maintain a ${tone} tone in responses
+    - Maintain a {{ tone }} tone in responses
     
     Your goal is to provide accurate, helpful responses enhanced by retrieved information.
     """
@@ -40,7 +46,7 @@ class PromptTemplate:
     # Template for query reformulation to improve retrieval
     QUERY_REFORMULATION_TEMPLATE = """
     I need to find relevant information about the following query:
-    "${original_query}"
+    "{{ original_query }}"
     
     To improve retrieval results, please convert this into a more effective search query by:
     1. Identifying key concepts and terminology
@@ -49,33 +55,33 @@ class PromptTemplate:
     4. Including any relevant technical terms mentioned
     5. Removing unnecessary words and fillers
     
-    Context about the domain: ${domain_context}
-    Previous related queries: ${related_queries}
+    Domain context: {{ domain_context }}
+    {% if related_queries %}Previous related queries: {{ related_queries }}{% endif %}
     """
     
     # Template for presenting retrieved context in conversation
     CONTEXT_PRESENTATION_TEMPLATE = """
     Based on retrieved information:
     
-    ${formatted_chunks}
+    {{ formatted_chunks }}
     
     Use these relevant passages to address the following question:
-    ${query}
+    {{ query }}
     
     Provide a comprehensive answer that synthesizes information from the retrieved content.
     Cite specific sources when drawing from particular chunks.
     """
     
-    # Template for presenting dataframe results
-    DATAFRAME_RESULTS_TEMPLATE = """
-    Here's the data analysis for your query "${query}":
+    # Template for data analysis results
+    DATA_ANALYSIS_TEMPLATE = """
+    Here's the data analysis for your query "{{ query }}":
     
-    ${formatted_data}
+    {{ formatted_data }}
     
     Key insights:
-    - ${insight_1}
-    - ${insight_2}
-    - ${insight_3}
+    - {{ insight_1 }}
+    - {{ insight_2 }}
+    - {{ insight_3 }}
     
     Would you like me to explain any specific aspect of these results in more detail?
     """
@@ -84,66 +90,186 @@ class PromptTemplate:
     CHUNK_SUMMARIZATION_TEMPLATE = """
     Summarize the following information in a concise way while preserving key details:
     
-    "${chunk_content}"
+    "{{ chunk_content }}"
     
     Create a summary that:
     1. Captures essential facts and concepts
     2. Maintains technical accuracy
-    3. Is approximately ${target_length} words long
-    4. Focuses on aspects relevant to ${focus_area}
+    3. Is approximately {{ target_length }} words long
+    4. Focuses on aspects relevant to {{ focus_area }}
     """
     
     # Template for agent handoff with context
     AGENT_HANDOFF_TEMPLATE = """
-    [AGENT HANDOFF: ${source_agent} → ${target_agent}]
+    [AGENT HANDOFF: {{ source_agent }} → {{ target_agent }}]
     
-    QUERY: ${original_query}
+    QUERY: {{ original_query }}
     
     RETRIEVED CONTEXT:
-    ${context_summary}
+    {{ context_summary }}
     
     ACTIONS TAKEN:
-    ${previous_actions}
+    {{ previous_actions }}
     
     NEXT STEPS:
-    ${recommended_actions}
+    {{ recommended_actions }}
     
     ADDITIONAL NOTES:
-    ${notes}
+    {{ notes }}
+    """
+    
+    # Template for vector search result formatting
+    SEARCH_RESULTS_TEMPLATE = """
+    Based on your query "{{ query }}", I found the following relevant information:
+    
+    {{ formatted_results }}
+    
+    These results were selected based on semantic similarity to your question.
+    """
+    
+    # Template for operational mode transition (from Big_Brain.md concepts)
+    MODE_TRANSITION_TEMPLATE = """
+    [System Notification: Transitioning from {{ previous_mode }} to {{ new_mode }} mode]
+    
+    During this transition, the system will:
+    1. {{ transition_action_1 }}
+    2. {{ transition_action_2 }} 
+    3. {{ transition_action_3 }}
+    
+    This process enables continuous self-improvement through iterative refinement as
+    described in the recursive self-improving RAG framework.
+    
+    Estimated completion time: {{ estimated_time }}
+    """
+
+    # Template for semantic reranking of search results 
+    SEMANTIC_RERANKING_TEMPLATE = """
+    Please analyze the following search results for relevance to the query: "{{ query }}"
+    
+    {% for result in results %}
+    [{{ loop.index }}] {{ result.text | truncate(200) }}
+    {% endfor %}
+    
+    Provide a ranking of the result indices from most to least relevant, considering:
+    - Direct relevance to the query
+    - Information quality and completeness
+    - Factual accuracy
+    
+    Format your response exactly like this: [1, 5, 2, 4, 3]
+    """
+    
+    # Template for knowledge consolidation during sleep phase
+    KNOWLEDGE_CONSOLIDATION_TEMPLATE = """
+    [SLEEP PHASE KNOWLEDGE CONSOLIDATION]
+    
+    Previous interactions to analyze:
+    {% for interaction in interactions %}
+    INTERACTION {{ loop.index }}:
+    Query: {{ interaction.query }}
+    Response: {{ interaction.response | truncate(200) }}
+    {% endfor %}
+    
+    CONSOLIDATION OBJECTIVES:
+    1. Identify recurring themes or topics
+    2. Detect knowledge gaps in previous responses
+    3. Propose improvements for future interactions
+    4. Recommend knowledge areas to enhance
+    
+    Provide a structured analysis optimized for improving the RAG system's performance.
     """
     
     # Version tracking for templates
     TEMPLATE_VERSIONS = {
-        "rag_system": "1.0",
-        "query_reformulation": "1.0",
-        "context_presentation": "1.0",
-        "dataframe_results": "1.0",
-        "chunk_summarization": "1.0",
-        "agent_handoff": "1.0"
+        "rag_system": "1.1",
+        "query_reformulation": "1.1", 
+        "context_presentation": "1.1",
+        "data_analysis": "1.1",
+        "chunk_summarization": "1.1",
+        "agent_handoff": "1.1",
+        "search_results": "1.1",
+        "mode_transition": "1.1",
+        "semantic_reranking": "1.0",
+        "knowledge_consolidation": "1.0"
     }
     
-    # Dictionary to cache template instances by name
-    _template_instances = {}
+    def __init__(self):
+        """Initialize the Jinja2 template environment."""
+        # Check if already initialized (singleton)
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+            
+        # Setup the Jinja2 environment
+        self.env = Environment(
+            loader=FileSystemLoader(self._get_templates_directory()),
+            autoescape=select_autoescape(['html', 'xml']),
+            trim_blocks=True,
+            lstrip_blocks=True
+        )
+        
+        # Add custom filters
+        self.env.filters['json'] = lambda obj: json.dumps(obj, indent=2)
+        self.env.filters['truncate'] = self._truncate_filter
+        
+        # Register built-in templates
+        self._register_builtin_templates()
+        
+        # Dictionary to cache template instances by name
+        self._template_instances = {}
+        
+        # Tracking and statistics
+        self.template_usage = {}
+        self._initialized = True
+        
+    def _get_templates_directory(self) -> Path:
+        """Get or create the directory for storing template files."""
+        template_dir = Config.get_base_dir() / "templates"
+        os.makedirs(template_dir, exist_ok=True)
+        return template_dir
     
-    def __init__(self, template_text: Optional[str] = None, template_name: Optional[str] = None):
-        """
-        Initialize a prompt template.
+    def _truncate_filter(self, value, length=80, killwords=False, end='...'):
+        """Custom filter to truncate text."""
+        if len(value) <= length:
+            return value
         
-        Args:
-            template_text: Custom template text, or None to create an empty template
-            template_name: Optional name for the template for tracking purposes
-        """
-        self.template = Template(template_text) if template_text else None
-        self.template_name = template_name
-        self.template_text = template_text
-        self.variables = self._extract_variables(template_text) if template_text else set()
-        self.version = "custom-1.0"
-        self.usage_count = 0
-        self.successful_uses = 0
+        if killwords:
+            return value[:length] + end
         
+        # Truncate at word boundary
+        return value[:length].rsplit(' ', 1)[0] + end
+    
+    def _register_builtin_templates(self):
+        """Register the built-in templates."""
+        builtin_templates = {
+            'rag_system': self.RAG_SYSTEM_TEMPLATE,
+            'query_reformulation': self.QUERY_REFORMULATION_TEMPLATE,
+            'context_presentation': self.CONTEXT_PRESENTATION_TEMPLATE,
+            'data_analysis': self.DATA_ANALYSIS_TEMPLATE, 
+            'chunk_summarization': self.CHUNK_SUMMARIZATION_TEMPLATE,
+            'agent_handoff': self.AGENT_HANDOFF_TEMPLATE,
+            'search_results': self.SEARCH_RESULTS_TEMPLATE,
+            'mode_transition': self.MODE_TRANSITION_TEMPLATE,
+            'semantic_reranking': self.SEMANTIC_RERANKING_TEMPLATE,
+            'knowledge_consolidation': self.KNOWLEDGE_CONSOLIDATION_TEMPLATE
+        }
+        
+        # Add each template to the environment
+        for name, template_text in builtin_templates.items():
+            self.env.globals[name] = template_text
+            
+            # Create and cache template instance
+            template = self.env.from_string(template_text)
+            self._template_instances[name] = {
+                'template': template,
+                'text': template_text,
+                'version': self.TEMPLATE_VERSIONS.get(name, '1.0'),
+                'variables': self._extract_variables(template_text),
+                'usage_count': 0,
+                'successful_uses': 0
+            }
+            
     def _extract_variables(self, template_text: str) -> set:
         """
-        Extract template variables from the template text.
+        Extract template variables from Jinja2 template text.
         
         Args:
             template_text: The template text to analyze
@@ -154,63 +280,147 @@ class PromptTemplate:
         if not template_text:
             return set()
             
-        # Find all ${variable} patterns in the template
-        matches = re.findall(r'\${([^}]+)}', template_text)
-        return set(matches)
+        # Find all {{ variable }} patterns in the template
+        # This is a simple regex parser, not a full Jinja2 parser
+        simple_vars = re.findall(r'\{\{\s*(\w+)(?:\s*\|\s*\w+(?:\(.*?\))?)?\s*\}\}', template_text)
+        if_vars = re.findall(r'\{%\s*if\s+(\w+)', template_text)
+        for_vars = re.findall(r'\{%\s*for\s+\w+\s+in\s+(\w+)', template_text)
+        
+        # Combine all found variables
+        return set(simple_vars + if_vars + for_vars)
             
-    @classmethod
-    def from_preset(cls, template_name: str) -> 'PromptTemplate':
+    def get_template(self, template_name: str) -> Template:
         """
-        Create a template from a predefined preset.
+        Get a Jinja2 template by name.
         
         Args:
-            template_name: Name of the preset template to use
-                (rag_system, query_reformulation, context_presentation,
-                 dataframe_results, chunk_summarization, agent_handoff)
+            template_name: Name of the template to retrieve
                 
         Returns:
-            PromptTemplate: Initialized with the selected preset
+            Jinja2 Template object
             
         Raises:
-            ValueError: If template_name is not a valid preset
+            ValueError: If template_name is not found
         """
-        # Check if we already have a cached instance
-        if template_name in cls._template_instances:
-            return cls._template_instances[template_name]
+        # Check if we have a cached built-in template
+        if template_name in self._template_instances:
+            self._template_instances[template_name]['usage_count'] += 1
+            return self._template_instances[template_name]['template']
             
-        template_map = {
-            'rag_system': cls.RAG_SYSTEM_TEMPLATE,
-            'query_reformulation': cls.QUERY_REFORMULATION_TEMPLATE,
-            'context_presentation': cls.CONTEXT_PRESENTATION_TEMPLATE,
-            'dataframe_results': cls.DATAFRAME_RESULTS_TEMPLATE,
-            'chunk_summarization': cls.CHUNK_SUMMARIZATION_TEMPLATE,
-            'agent_handoff': cls.AGENT_HANDOFF_TEMPLATE
-        }
-        
-        if template_name not in template_map:
-            valid_options = ", ".join(template_map.keys())
-            raise ValueError(f"Unknown template preset: '{template_name}'. "
-                            f"Available presets: {valid_options}")
-            
-        template = cls(template_map[template_name], template_name)
-        template.version = cls.TEMPLATE_VERSIONS.get(template_name, "1.0")
-        
-        # Cache the template instance
-        cls._template_instances[template_name] = template
-        
-        log.debug(f"Created template from preset '{template_name}' (v{template.version})")
-        return template
+        # Try to load from filesystem
+        try:
+            return self.env.get_template(f"{template_name}.j2")
+        except jinja2.exceptions.TemplateNotFound:
+            valid_templates = ", ".join(self._template_instances.keys())
+            raise ValueError(f"Template '{template_name}' not found. Available templates: {valid_templates}")
     
-    @classmethod
-    def from_file(cls, file_path: Union[str, Path]) -> 'PromptTemplate':
+    def register_template(self, name: str, template_text: str, version: str = "custom-1.0") -> None:
         """
-        Load a template from a file.
+        Register a new template with the system.
         
         Args:
-            file_path: Path to the template file (txt or json)
+            name: Template name
+            template_text: Template content
+            version: Template version
+            
+        Raises:
+            ValueError: If template is empty or invalid
+        """
+        if not template_text or not template_text.strip():
+            raise ValueError("Cannot register empty template")
+            
+        try:
+            # Create Jinja2 template
+            template = self.env.from_string(template_text)
+            
+            # Extract variables
+            variables = self._extract_variables(template_text)
+            
+            # Store in cache
+            self._template_instances[name] = {
+                'template': template,
+                'text': template_text,
+                'version': version,
+                'variables': variables,
+                'usage_count': 0,
+                'successful_uses': 0
+            }
+            
+            # Save to file system if it's a custom template
+            if name.startswith('custom_'):
+                template_path = self._get_templates_directory() / f"{name}.j2"
+                with open(template_path, 'w', encoding='utf-8') as f:
+                    f.write(template_text)
+            
+            log.info(f"Registered template '{name}' (v{version}) with {len(variables)} variables")
+            
+        except jinja2.exceptions.TemplateSyntaxError as e:
+            raise ValueError(f"Invalid template syntax: {str(e)}")
+    
+    def render(self, template_name: str, **kwargs) -> str:
+        """
+        Render a template with the provided values.
+        
+        Args:
+            template_name: Name of the template to render
+            **kwargs: Values to substitute in the template
             
         Returns:
-            PromptTemplate: Initialized with the loaded template
+            str: The rendered template
+            
+        Raises:
+            ValueError: If template is not found or rendering fails
+        """
+        try:
+            template = self.get_template(template_name)
+            
+            # Check for missing variables
+            template_info = self.template_cache.get_template(template_name)
+            
+            if template_info:
+                # Check for missing variables
+                missing_vars = template_info['variables'] - set(kwargs.keys())
+                if missing_vars:
+                    # Use default values for optional variables (if provided)
+                    defaults = kwargs.get('defaults', {})
+                    for var in list(missing_vars):
+                        if var in defaults:
+                            kwargs[var] = defaults[var]
+                            missing_vars.remove(var)
+                
+                # Raise error if required variables are still missing
+                if missing_vars and not kwargs.get('ignore_missing', False):
+                    missing_list = ", ".join(missing_vars)
+                    raise ValueError(f"Missing required template variables: {missing_list}")
+            
+            # Render template
+            result = template.render(**kwargs)
+            
+            # Update statistics
+            if template_info:
+                self.template_cache.record_successful_use(template_name)
+                
+            return result
+            
+        except jinja2.exceptions.UndefinedError as e:
+            log.error(f"Template rendering error: {str(e)}")
+            raise ValueError(f"Missing template variable: {str(e)}")
+        except jinja2.exceptions.TemplateSyntaxError as e:
+            log.error(f"Template syntax error: {str(e)}")
+            raise ValueError(f"Template syntax error: {str(e)}")
+        except Exception as e:
+            log.error(f"Template rendering failed: {str(e)}")
+            raise ValueError(f"Failed to render template '{template_name}': {str(e)}")
+    
+    def from_file(self, file_path: Union[str, Path]) -> str:
+        """
+        Load a template from a file and register it with the system.
+        
+        Args:
+            file_path: Path to the template file (j2, jinja, txt, or json)
+            
+        Returns:
+            str: Template name for later reference
             
         Raises:
             FileNotFoundError: If the file doesn't exist
@@ -233,216 +443,165 @@ class PromptTemplate:
                 if not template_text:
                     raise ValueError(f"JSON template file must contain a 'template' field")
                     
-                template = cls(template_text, template_name)
-                template.version = version
-                
-            else:  # Default to raw text file
+            else:  # Default to raw text file (.j2, .jinja, .txt, etc)
                 with open(path, 'r', encoding='utf-8') as f:
                     template_text = f.read()
                     
-                template = cls(template_text, path.stem)
-                template.version = "file-1.0"
-                
-            log.info(f"Loaded template '{template.template_name}' from {path.name}")
-            return template
+                template_name = path.stem
+                version = "file-1.0"
+            
+            # Register the template with cache system
+            template_object = self.env.from_string(template_text)
+            self.template_cache.add_template(
+                name=template_name,
+                template_object=template_object,
+                template_text=template_text,
+                version=version
+            )
+            
+            log.info(f"Loaded template '{template_name}' from {path.name}")
+            return template_name
             
         except Exception as e:
             log.error(f"Failed to load template from {path}: {e}")
             raise ValueError(f"Failed to load template from {file_path}: {e}")
     
-    def save_to_file(self, file_path: Union[str, Path], format: str = 'json') -> None:
+    def save_to_file(self, template_name: str, file_path: Union[str, Path], format: str = 'json') -> None:
         """
-        Save the template to a file.
+        Save a template to a file.
         
         Args:
+            template_name: Name of the template to save
             file_path: Path where to save the template
-            format: Format to save as ('json' or 'txt')
+            format: Format to save as ('json', 'j2', or 'txt')
             
         Raises:
-            ValueError: If the template is not initialized or format is invalid
+            ValueError: If the template is not found or format is invalid
         """
-        if not self.template_text:
-            raise ValueError("Cannot save empty template")
-            
+        # Get template info from cache
+        template_info = self.template_cache.get_template(template_name)
+        if not template_info:
+            raise ValueError(f"Template '{template_name}' not found")
+        
         path = Path(file_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         
         try:
             if format.lower() == 'json':
                 data = {
-                    'name': self.template_name or 'unnamed_template',
-                    'version': self.version,
-                    'template': self.template_text,
-                    'variables': list(self.variables),
+                    'name': template_name,
+                    'version': template_info['version'],
+                    'template': template_info['text'],
+                    'variables': list(template_info['variables']),
                     'stats': {
-                        'usage_count': self.usage_count,
-                        'successful_uses': self.successful_uses
+                        'usage_count': template_info['usage_count'],
+                        'successful_uses': template_info['successful_uses']
                     }
                 }
                 
                 with open(path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, indent=2)
                     
-            else:  # Default to raw text
+            else:  # Default to raw text (j2 or txt)
                 with open(path, 'w', encoding='utf-8') as f:
-                    if self.template_name:
-                        f.write(f"# Template: {self.template_name} (v{self.version})\n\n")
-                    f.write(self.template_text)
+                    if format.lower() == 'j2':
+                        # For j2 format, just write the raw template
+                        f.write(template_info['text'])
+                    else:
+                        # For txt format, include some metadata as comments
+                        f.write(f"{{% # Template: {template_name} (v{template_info['version']}) %}}\n\n")
+                        f.write(template_info['text'])
                 
-            log.info(f"Saved template to {path}")
+            log.info(f"Saved template '{template_name}' to {path}")
             
         except Exception as e:
             log.error(f"Failed to save template to {path}: {e}")
             raise ValueError(f"Failed to save template: {e}")
     
-    def format(self, **kwargs) -> str:
-        """
-        Format the template with the provided values.
-        
-        Args:
-            **kwargs: Key-value pairs to substitute in the template
-            
-        Returns:
-            str: The formatted prompt string
-            
-        Raises:
-            ValueError: If template is not initialized
-            KeyError: If required template variables are missing
-        """
-        if not self.template:
-            raise ValueError("Template not initialized")
-        
-        # Track usage stats
-        self.usage_count += 1
-            
-        try:
-            # Check for missing variables
-            missing_vars = self.variables - set(kwargs.keys())
-            if missing_vars:
-                missing_list = ", ".join(missing_vars)
-                raise KeyError(f"Missing required template variables: {missing_list}")
-                
-            # Format template
-            result = self.template.substitute(**kwargs)
-            
-            # Track successful formatting
-            self.successful_uses += 1
-            return result
-            
-        except KeyError as e:
-            log.error(f"Missing template variable: {e}")
-            raise ValueError(f"Missing required template variable: {e}")
-        
-    def add_examples(self, examples: List[Dict[str, str]]) -> 'PromptTemplate':
+    def add_examples(self, template_name: str, examples: List[Dict[str, Any]]) -> str:
         """
         Add few-shot learning examples to a template.
         
         Args:
+            template_name: Template to enhance
             examples: List of example dictionaries with keys matching template variables
             
         Returns:
-            PromptTemplate: Updated template with examples
+            str: Name of the new template with examples
             
         Raises:
-            ValueError: If template is not initialized or examples are invalid
+            ValueError: If template is not found or examples are invalid
         """
-        if not self.template_text:
-            raise ValueError("Cannot add examples to empty template")
+        # Get template from cache
+        template_info = self.template_cache.get_template(template_name)
+        if not template_info:
+            raise ValueError(f"Template '{template_name}' not found")
+            
+        template_text = template_info['text']
             
         if not examples:
-            return self
+            return template_name
             
-        # Format example section
-        example_section = "\n\nEXAMPLES:\n"
-        
-        for i, example in enumerate(examples, 1):
-            example_section += f"\nExample {i}:\n"
-            
-            # Format each example using the available variables
-            try:
-                # Extract input and output from example
-                example_inputs = {k: v for k, v in example.items() if k != 'output'}
-                example_output = example.get('output', '')
-                
-                # Format example with available inputs
-                example_prompt = self.template.safe_substitute(**example_inputs)
-                
-                # Add formatted example
-                example_section += f"Input:\n```\n{example_prompt}\n```\n"
-                if example_output:
-                    example_section += f"Output:\n```\n{example_output}\n```\n"
-                    
-            except Exception as e:
-                log.warning(f"Skipped invalid example {i}: {e}")
+        # Format example section using Jinja2 syntax
+        example_section = """
+
+{# EXAMPLES SECTION #}
+{% if examples %}
+EXAMPLES:
+
+{% for example in examples %}
+Example {{ loop.index }}:
+
+Input:
+```
+{{ example.input }}
+```
+Output:
+```
+{{ example.output }}
+```
+{% endfor %}
+{% endif %}
+"""
         
         # Create new template with examples appended
-        new_template_text = self.template_text + example_section
-        new_template = PromptTemplate(new_template_text, f"{self.template_name}_with_examples")
-        new_template.version = f"{self.version}+examples"
+        new_template_text = template_text + example_section
+        new_template_name = f"{template_name}_with_examples"
         
-        return new_template
+        # Register the new template
+        self.register_template(new_template_name, new_template_text, f"{template_info['version']}+examples")
+        
+        return new_template_name
     
-    def create_chat_messages(
-        self, 
-        system_template: Optional['PromptTemplate'] = None,
-        **kwargs
-    ) -> List[Dict[str, str]]:
-        """
-        Create a list of chat messages from the template.
-        
-        Args:
-            system_template: Optional system template to use
-            **kwargs: Key-value pairs to substitute in the templates
-            
-        Returns:
-            List of message dictionaries with 'role' and 'content' keys
-            
-        Raises:
-            ValueError: If user template is not initialized
-        """
-        messages = []
-        
-        # Add system message if provided
-        if system_template:
-            try:
-                system_content = system_template.format(**kwargs)
-                messages.append({
-                    "role": "system",
-                    "content": system_content
-                })
-            except Exception as e:
-                log.warning(f"Failed to format system template: {e}")
-                # Continue with just the user message
-        
-        # Add user message from this template
-        user_content = self.format(**kwargs)
-        messages.append({
-            "role": "user",
-            "content": user_content
-        })
-        
-        return messages
-    
-    def validate(self) -> Tuple[bool, Optional[str]]:
+    def validate(self, template_name: str) -> Tuple[bool, Optional[str]]:
         """
         Validate the template structure and variables.
+        
+        Args:
+            template_name: Name of the template to validate
         
         Returns:
             Tuple of (is_valid, error_message)
         """
-        if not self.template_text:
+        if template_name not in self._template_instances:
+            return False, f"Template '{template_name}' not found"
+            
+        template_info = self._template_instances[template_name]
+        template_text = template_info['text']
+        
+        if not template_text:
             return False, "Template is empty"
             
         # Check for balanced braces in variable placeholders
-        open_count = self.template_text.count('${')
-        close_count = self.template_text.count('}')
+        open_count = template_text.count('{{')
+        close_count = template_text.count('}}')
         
         if open_count != close_count:
-            return False, f"Unbalanced variable placeholders: ${open_count} opening vs {close_count} closing"
+            return False, f"Unbalanced variable placeholders: {{ {open_count} opening vs {close_count} closing }}"
             
         # Check template size
-        if len(self.template_text) > 10000:
-            return False, f"Template too large: {len(self.template_text)} chars (max 10000)"
+        if len(template_text) > 10000:
+            return False, f"Template too large: {len(template_text)} chars (max 10000)"
             
         return True, None
 

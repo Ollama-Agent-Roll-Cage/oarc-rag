@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime
 from typing import Any
 
-from oarc_rag.ai.agents.agent import Agent
+from oarc_rag.ai.agent import Agent
 
 
 # Concrete implementation for testing

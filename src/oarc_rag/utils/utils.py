@@ -186,18 +186,18 @@ class Utils:
         return filename
 
     @staticmethod
-    def check_for_ollama(raise_error: bool = True) -> bool:
+    def check_for_ollama(raise_error: bool = False) -> bool:
         """
-        Check if Ollama server is available and responding.
+        Check if Ollama server is available.
         
         Args:
             raise_error: Whether to raise an error if Ollama is not available
-        
+            
         Returns:
-            bool: True if Ollama is available
+            bool: True if Ollama is available, False otherwise
             
         Raises:
-            RuntimeError: If Ollama is not available and raise_error is True
+            RuntimeError: If raise_error is True and Ollama is not available
         """
         import requests
         from urllib.parse import urljoin

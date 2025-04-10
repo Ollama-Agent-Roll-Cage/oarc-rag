@@ -6,6 +6,7 @@ import time
 import os
 from typing import Any, Dict, List, Optional, Union, Callable, TypeVar
 import asyncio
+from datetime import datetime, timedelta
 
 from ollama import AsyncClient
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -13,6 +14,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from oarc_rag.utils.log import log
 from oarc_rag.utils.decorators.singleton import singleton
 from oarc_rag.utils.config import AI_CONFIG
+from oarc_rag.core.cache import cache_manager, ResponseCache
 
 # Type variable for generic return type annotations
 T = TypeVar('T')
@@ -29,8 +31,8 @@ class OllamaClient:
     @classmethod
     async def validate_ollama(cls) -> None:
         """Validate Ollama availability asynchronously."""
-        from oarc_rag.utils.utils import check_for_ollama
-        check_for_ollama(raise_error=True)
+        from oarc_rag.utils.utils import Utils
+        Utils.check_for_ollama(raise_error=True)
         
     def __init__(
         self,
@@ -38,7 +40,9 @@ class OllamaClient:
         default_model: Optional[str] = None,
         default_temperature: Optional[float] = None,
         default_max_tokens: Optional[int] = None,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        cache_responses: bool = True,
+        cache_ttl: int = 3600  # 1 hour cache TTL
     ):
         """
         Initialize the Ollama client.
@@ -49,6 +53,8 @@ class OllamaClient:
             default_temperature: Default temperature for generation
             default_max_tokens: Default maximum tokens for generation
             output_dir: Custom output directory path
+            cache_responses: Whether to cache responses
+            cache_ttl: Time-to-live for cached responses in seconds
             
         Raises:
             RuntimeError: If Ollama server is not available
@@ -76,11 +82,97 @@ class OllamaClient:
         
         log.info(f"Created output directory structure in: {self.output_dir}")
         
+        # Get response cache from cache manager
+        self.cache_responses = cache_responses
+        self.response_cache = cache_manager.response_cache
+        
         # Initialize Ollama client
         self.client = AsyncClient(host=self.base_url)
         self.last_request = {}  # Add this to store last request data for debugging
         self.last_response = {}  # Add this to store last response data for debugging
         
+        # Add API call monitoring
+        self.api_calls = {
+            "generate": 0,
+            "chat": 0,
+            "embed": 0,
+            "embed_batch": 0,
+            "list_models": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "errors": 0,
+            "total_tokens": 0
+        }
+        
+        # Adaptive response handling
+        self.operational_mode = "awake"  # Default to real-time mode
+        self.response_timeouts = {
+            "awake": 30,  # 30 seconds in awake mode
+            "sleep": 180  # 3 minutes in sleep mode
+        }
+        
+    def set_operational_mode(self, mode: str) -> None:
+        """
+        Set the client's operational mode to adjust response handling.
+        
+        Args:
+            mode: "awake" or "sleep"
+            
+        Raises:
+            ValueError: If mode is invalid
+        """
+        if mode not in ("awake", "sleep"):
+            raise ValueError('Operational mode must be either "awake" or "sleep"')
+        
+        self.operational_mode = mode
+        log.info(f"OllamaClient operational mode set to: {mode}")
+
+    def _get_timeout(self) -> int:
+        """Get appropriate timeout based on operational mode."""
+        return self.response_timeouts.get(self.operational_mode, 30)
+    
+    def _cache_key(self, **kwargs) -> str:
+        """
+        Generate a cache key from request parameters.
+        
+        Args:
+            **kwargs: Request parameters
+            
+        Returns:
+            Cache key string
+        """
+        # Remove parameters that shouldn't affect caching
+        if "stream" in kwargs:
+            del kwargs["stream"]
+        if "callback" in kwargs:
+            del kwargs["callback"]
+            
+        # Sort dictionary to ensure consistent ordering
+        sorted_items = sorted(kwargs.items())
+        
+        # Convert to JSON string for hashing
+        return json.dumps(sorted_items, sort_keys=True)
+    
+    def _clean_expired_cache(self) -> None:
+        """Remove expired items from cache."""
+        now = datetime.now()
+        expired_keys = [k for k, v in self._cache_expiry.items() if now > v]
+        
+        for key in expired_keys:
+            if key in self._response_cache:
+                del self._response_cache[key]
+            if key in self._cache_expiry:
+                del self._cache_expiry[key]
+                
+        if expired_keys:
+            log.debug(f"Cleaned {len(expired_keys)} expired cache entries")
+    
+    def invalidate_cache(self) -> None:
+        """Clear all cached responses."""
+        if hasattr(self, 'response_cache'):
+            self.response_cache.clear()
+            log.info(f"Invalidated response cache")
+    
     async def initialize(self):
         """Initialize the client and validate server connection."""
         # Validate Ollama availability
@@ -143,6 +235,23 @@ class OllamaClient:
         if not prompt:
             raise ValueError("Prompt cannot be empty")
         
+        # Prepare request params for cache lookup
+        request_params = {
+            "prompt": prompt,
+            "model": model or self.default_model,
+            "system": system,
+            "temperature": temperature or self.default_temperature,
+            "max_tokens": max_tokens or self.default_max_tokens,
+        }
+        
+        # Check cache if enabled
+        if self.cache_responses:
+            cached_response = self.response_cache.get_response(request_params)
+            if cached_response:
+                self.api_calls["cache_hits"] += 1
+                return cached_response
+            self.api_calls["cache_misses"] += 1
+        
         # Convert parameters to chat format
         messages = []
         if system:
@@ -154,23 +263,47 @@ class OllamaClient:
         temp = temperature if temperature is not None else self.default_temperature
         num_predict = max_tokens or self.default_max_tokens
         
+        # Track API call
+        self.api_calls["generate"] += 1
+        
         try:
-            # Use the ollama library's chat method
-            response = await self.client.chat(
-                model=model_name,
-                messages=messages,
-                options={
-                    "temperature": temp,
-                    "num_predict": num_predict
-                }
+            # Get appropriate timeout based on operational mode
+            timeout = self._get_timeout()
+            
+            # Use the ollama library's chat method with timeout
+            response = await asyncio.wait_for(
+                self.client.chat(
+                    model=model_name,
+                    messages=messages,
+                    options={
+                        "temperature": temp,
+                        "num_predict": num_predict
+                    }
+                ),
+                timeout=timeout
             )
             
             # Extract content from chat response
             if response and "message" in response and "content" in response["message"]:
-                return response["message"]["content"].strip()
+                content = response["message"]["content"].strip()
+                
+                # Track token usage if available
+                if "eval_count" in response:
+                    self.api_calls["total_tokens"] += response["eval_count"]
+                
+                # Cache response if enabled
+                if self.cache_responses:
+                    self.response_cache.add_response(request_params, content)
+                
+                return content
             return ""
                 
+        except asyncio.TimeoutError:
+            self.api_calls["errors"] += 1
+            log.error(f"Request timed out after {timeout} seconds")
+            raise RuntimeError(f"Request timed out after {timeout} seconds")
         except Exception as e:
+            self.api_calls["errors"] += 1
             log.error(f"Failed to generate text: {e}")
             return f"Error generating text: {e}"
 
@@ -490,3 +623,24 @@ class OllamaClient:
         except Exception as e:
             log.error(f"Error generating text: {e}")
             return f"Error generating text: {e}"
+    
+    def get_usage_stats(self) -> Dict[str, Any]:
+        """
+        Get API usage statistics.
+        
+        Returns:
+            Dict with usage statistics
+        """
+        # Calculate derived metrics
+        total_calls = sum(self.api_calls[k] for k in ["generate", "chat", "embed", "embed_batch", "list_models"])
+        cache_total = self.api_calls["cache_hits"] + self.api_calls["cache_misses"]
+        cache_hit_rate = self.api_calls["cache_hits"] / max(1, cache_total)
+        
+        return {
+            "calls": self.api_calls.copy(),
+            "total_calls": total_calls,
+            "cache_hit_rate": cache_hit_rate,
+            "error_rate": self.api_calls["errors"] / max(1, total_calls),
+            "avg_tokens_per_call": self.api_calls["total_tokens"] / max(1, total_calls),
+            "cache_entries": len(self._response_cache)
+        }

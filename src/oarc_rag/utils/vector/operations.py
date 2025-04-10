@@ -1,210 +1,171 @@
 """
-Vector math operations for RAG functionality.
+Vector operations utilities for the OARC-RAG system.
 
-This module provides advanced vector mathematics operations using scikit-learn
-and other libraries to support retrieval-augmented generation capabilities.
+This module provides optimized vector operations for embeddings and similarity search,
+with a focus on HNSW for approximate nearest neighbor search.
 """
 import numpy as np
-from typing import Any, List, Optional, Tuple, Union, Dict
-
-from sklearn.decomposition import PCA
-from sklearn.metrics.pairwise import cosine_similarity as sk_cosine_similarity
-from sklearn.preprocessing import normalize as sk_normalize
+import time
+from typing import List, Tuple, Any, Optional
+import hnswlib
 
 from oarc_rag.utils.log import log
-from oarc_rag.utils.deps import DependencyManager
 
-# Import FAISS directly
-import faiss
+# Set HNSW availability flag
+HNSW_AVAILABLE = True
 
-# Define GPU capability flag here directly
-FAISS_GPU_ENABLED = DependencyManager._is_faiss_gpu_installed()
+# Utility functions
 
-
-def cosine_similarity(v1: Union[List[float], np.ndarray], v2: Union[List[float], np.ndarray]) -> float:
+def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
     """
-    Calculate cosine similarity between two vectors.
+    Compute cosine similarity between two vectors.
     
     Args:
-        v1: First vector
-        v2: Second vector
+        vec1: First vector
+        vec2: Second vector
         
     Returns:
-        float: Cosine similarity score
-        
-    Raises:
-        ValueError: If vectors have different dimensions
+        Cosine similarity (0-1)
     """
-    # Convert to numpy arrays if needed
-    if not isinstance(v1, np.ndarray):
-        v1 = np.array(v1)
-    if not isinstance(v2, np.ndarray):
-        v2 = np.array(v2)
-        
-    if v1.shape != v2.shape:
-        raise ValueError(f"Vector dimensions do not match: {v1.shape} vs {v2.shape}")
-        
-    # Calculate cosine similarity
-    dot = np.dot(v1, v2)
-    norm_v1 = np.linalg.norm(v1)
-    norm_v2 = np.linalg.norm(v2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
     
-    # Handle zero vectors
-    if norm_v1 == 0 or norm_v2 == 0:
+    if norm1 == 0 or norm2 == 0:
         return 0.0
-        
-    return float(dot / (norm_v1 * norm_v2))
+    
+    return float(np.dot(vec1, vec2) / (norm1 * norm2))
 
-
-def normalize_vector(vector: Union[List[float], np.ndarray]) -> List[float]:
+def euclidean_distance(vec1: np.ndarray, vec2: np.ndarray) -> float:
     """
-    Normalize a vector to unit length using scikit-learn.
+    Compute Euclidean distance between two vectors.
     
     Args:
-        vector: Vector to normalize
+        vec1: First vector
+        vec2: Second vector
         
     Returns:
-        List[float]: Normalized vector
+        Euclidean distance
     """
-    v = np.array(vector, dtype=np.float32).reshape(1, -1)
-    
-    # Use scikit-learn's normalize which is optimized for L2 normalization
-    normalized = sk_normalize(v, norm='l2')
-    
-    return normalized.flatten().tolist()
+    return float(np.linalg.norm(vec1 - vec2))
 
-
-def mean_vector(vectors: List[List[float]]) -> List[float]:
+def inner_product(vec1: np.ndarray, vec2: np.ndarray) -> float:
     """
-    Calculate the mean of multiple vectors.
+    Compute inner product (dot product) between two vectors.
     
     Args:
-        vectors: List of vectors
+        vec1: First vector
+        vec2: Second vector
         
     Returns:
-        List[float]: Mean vector
-        
-    Raises:
-        ValueError: If no vectors provided or vectors have different dimensions
+        Inner product
     """
-    if not vectors:
-        raise ValueError("No vectors provided")
-    
-    # Convert to numpy array
-    np_vectors = np.array(vectors, dtype=np.float32)
-    
-    # Calculate mean
-    mean = np.mean(np_vectors, axis=0)
-    
-    return mean.tolist()
+    return float(np.dot(vec1, vec2))
 
-
-def concatenate_vectors(vectors: List[List[float]], 
-                       weights: Optional[List[float]] = None) -> List[float]:
+def normalize_vector(vec: np.ndarray) -> np.ndarray:
     """
-    Concatenate multiple vectors with optional weighting.
+    Normalize a vector to unit length.
     
     Args:
-        vectors: List of vectors to concatenate
-        weights: Optional weights for each vector
+        vec: Input vector
         
     Returns:
-        List[float]: Concatenated vector
-        
-    Raises:
-        ValueError: If weights are provided but don't match vector count
+        Normalized vector
     """
-    if not vectors:
-        return []
-    
-    if weights and len(weights) != len(vectors):
-        raise ValueError("Number of weights must match number of vectors")
-    
-    # Apply weights if provided
-    if weights:
-        weighted_vectors = []
-        for vec, weight in zip(vectors, weights):
-            weighted_vectors.append([v * weight for v in vec])
-        vectors = weighted_vectors
-    
-    # Concatenate
-    result = []
-    for vec in vectors:
-        result.extend(vec)
-    
-    return result
+    norm = np.linalg.norm(vec)
+    if norm == 0:
+        return vec
+    return vec / norm
 
-
-def reduce_dimensions(vectors: List[List[float]], target_dims: int) -> List[List[float]]:
+def batch_cosine_similarity(query: np.ndarray, vectors: np.ndarray) -> np.ndarray:
     """
-    Reduce dimensionality of vectors using PCA.
+    Calculate cosine similarity between a query vector and multiple vectors.
     
     Args:
-        vectors: List of vectors to reduce
-        target_dims: Target number of dimensions
+        query: Query vector (1D array)
+        vectors: Matrix of vectors (2D array)
         
     Returns:
-        List[List[float]]: Reduced dimension vectors
-        
-    Raises:
-        ValueError: If no vectors provided or target_dims is invalid
+        Array of similarity scores
     """
-    if not vectors:
-        raise ValueError("No vectors provided")
-        
-    if target_dims < 1:
-        raise ValueError("Target dimensions must be at least 1")
-        
-    # Convert to numpy array
-    np_vectors = np.array(vectors, dtype=np.float32)
+    # Normalize query
+    query_norm = np.linalg.norm(query)
+    if query_norm > 0:
+        query = query / query_norm
     
-    # Use scikit-learn's PCA for dimension reduction
-    pca = PCA(n_components=min(target_dims, np_vectors.shape[1]))
-    reduced = pca.fit_transform(np_vectors)
+    # Normalize vectors
+    vec_norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    vec_norms[vec_norms == 0] = 1
+    normalized_vectors = vectors / vec_norms
     
-    # Convert back to list format
-    return reduced.tolist()
+    # Calculate similarities
+    return np.dot(normalized_vectors, query)
 
-
-def batch_cosine_similarity(query_vector: Union[List[float], np.ndarray],
-                           vectors: List[List[float]]) -> List[float]:
+def vector_quantize(vector: np.ndarray, bits: int = 8) -> np.ndarray:
     """
-    Compute cosine similarity between a query vector and multiple vectors.
+    Quantize a vector to reduce memory usage.
     
     Args:
-        query_vector: Query vector
-        vectors: List of vectors to compare against
+        vector: Input vector
+        bits: Bits per value (8 or 4)
         
     Returns:
-        List[float]: List of similarity scores
+        Quantized vector
     """
-    if not vectors:
-        return []
+    if bits == 8:
+        return vector.astype(np.float16).astype(np.float32)
+    elif bits == 4:
+        # Implement 4-bit quantization using scaling and rounding
+        scale = max(abs(vector.max()), abs(vector.min()))
+        if scale == 0:
+            return vector
+            
+        # Scale to [-8, 7] for 4-bit signed integer range
+        scaled = np.round((vector / scale) * 7).astype(np.int8)
+        # Clip to 4-bit range
+        scaled = np.clip(scaled, -8, 7)
+        # Convert back to float
+        return (scaled / 7) * scale
+    else:
+        return vector  # No quantization
+
+def vector_dequantize(vector: np.ndarray, original_dtype: np.dtype) -> np.ndarray:
+    """
+    Restore a quantized vector to its original dtype.
+    
+    Args:
+        vector: Quantized vector
+        original_dtype: Original data type
         
-    # Convert to numpy arrays
-    q_vec = np.array(query_vector, dtype=np.float32).reshape(1, -1)
-    all_vecs = np.array(vectors, dtype=np.float32)
-    
-    # Compute similarities
-    similarities = sk_cosine_similarity(q_vec, all_vecs)[0]
-    
-    return similarities.tolist()
-
-
-def create_faiss_index(vectors: List[List[float]], use_gpu: bool = True) -> Any:
+    Returns:
+        Dequantized vector
     """
-    Create a FAISS index for efficient similarity search.
+    return vector.astype(original_dtype)
+
+# HNSW Operations
+
+def create_hnsw_index(
+    vectors: List[List[float]], 
+    space: str = "cosine", 
+    ef_construction: int = 200,
+    M: int = 16
+) -> Any:
+    """
+    Create an HNSW index for efficient similarity search.
     
     Args:
         vectors: Vectors to index
-        use_gpu: Whether to use GPU acceleration if available
+        space: Distance space ('cosine', 'l2', 'ip')
+        ef_construction: Index quality parameter (higher = better quality but slower construction)
+        M: Index size parameter (higher = better recall but more memory)
         
     Returns:
-        FAISS index object or None if FAISS is not available
+        HNSW index object
         
     Raises:
+        ImportError: If HNSW is not available
         ValueError: If vectors format is invalid
     """
+
     if not vectors:
         raise ValueError("No vectors provided to index")
         
@@ -214,219 +175,166 @@ def create_faiss_index(vectors: List[List[float]], use_gpu: bool = True) -> Any:
     # Get dimensionality
     d = np_vectors.shape[1]
     
-    # Create L2 index
-    index = faiss.IndexFlatL2(d)
+    # Create index
+    index = hnswlib.Index(space=space, dim=d)
     
-    # Use GPU if requested and available
-    if use_gpu and FAISS_GPU_ENABLED:
-        res = faiss.StandardGpuResources()
-        index = faiss.index_cpu_to_gpu(res, 0, index)
-        log.info("Using GPU-accelerated FAISS index")
-    elif use_gpu and not FAISS_GPU_ENABLED:
-            raise RuntimeError("GPU acceleration requested but FAISS GPU support not available")
+    # Initialize index
+    max_elements = len(vectors)
+    index.init_index(max_elements=max_elements, ef_construction=ef_construction, M=M)
     
-    # Add vectors to the index
-    index.add(np_vectors)
+    # Add vectors
+    index.add_items(np_vectors)
+    
+    # Set search parameters
+    index.set_ef(50)  # Higher values give more accurate but slower search
     
     return index
 
-
-def faiss_search(index: Any, query_vector: List[float], k: int = 5) -> Tuple[List[float], List[int]]:
+def hnsw_search(
+    index: Any, 
+    query_vector: List[float], 
+    k: int = 5
+) -> Tuple[List[float], List[int]]:
     """
-    Search a FAISS index for similar vectors.
+    Search an HNSW index for similar vectors.
     
     Args:
-        index: FAISS index created with create_faiss_index
+        index: HNSW index created with create_hnsw_index
         query_vector: Query vector
         k: Number of results to return
         
     Returns:
         Tuple of (distances, indices)
     """
+    if not HNSW_AVAILABLE:
+        raise ImportError("hnswlib is not available")
+        
     # Convert query to numpy array
-    q_vec = np.array([query_vector], dtype=np.float32)
+    q_vec = np.array(query_vector, dtype=np.float32)
     
     # Search the index
-    distances, indices = index.search(q_vec, k)
+    labels, distances = index.knn_query(q_vec, k=k)
     
     # Convert to Python lists
-    return distances[0].tolist(), indices[0].tolist()
+    return distances[0].tolist(), labels[0].tolist()
 
-
-def weighted_average_vectors(vectors: List[List[float]], weights: List[float]) -> List[float]:
+# PCA dimensionality reduction
+def apply_pca(vectors: np.ndarray, n_components: int) -> Tuple[np.ndarray, Any]:
     """
-    Calculate the weighted average of vectors.
+    Apply PCA dimensionality reduction to vectors.
     
     Args:
-        vectors: List of vectors to average
-        weights: Weight for each vector (must sum to 1.0)
+        vectors: Input vectors (2D array)
+        n_components: Number of components to keep
         
     Returns:
-        List[float]: Weighted average vector
+        Tuple of (reduced_vectors, pca_model)
         
     Raises:
-        ValueError: If vectors or weights are invalid
+        ImportError: If sklearn is not available
     """
-    if not vectors or not weights:
-        raise ValueError("Empty vectors or weights provided")
+    try:
+        from sklearn.decomposition import PCA
         
-    if len(vectors) != len(weights):
-        raise ValueError("Number of vectors must match number of weights")
-        
-    # Check weights approximately sum to 1.0
-    weight_sum = sum(weights)
-    if not 0.99 <= weight_sum <= 1.01:
-        log.warning(f"Weights sum to {weight_sum}, not 1.0. Normalizing.")
-        weights = [w / weight_sum for w in weights]
-    
-    # Convert to numpy arrays
-    np_vectors = np.array(vectors, dtype=np.float32)
-    np_weights = np.array(weights, dtype=np.float32).reshape(-1, 1)
-    
-    # Calculate weighted average
-    weighted_avg = np.sum(np_vectors * np_weights, axis=0)
-    
-    return weighted_avg.tolist()
-
-
-def find_diverse_vectors(vectors: List[List[float]], count: int = 3, 
-                        min_similarity_threshold: float = 0.7) -> List[int]:
-    """
-    Find a diverse subset of vectors by maximizing distance between them.
-    
-    Args:
-        vectors: List of vectors to select from
-        count: Number of diverse vectors to select
-        min_similarity_threshold: Minimum similarity threshold
-        
-    Returns:
-        List[int]: Indices of the selected diverse vectors
-    """
-    if not vectors:
-        return []
-        
-    if count > len(vectors):
-        count = len(vectors)
-        
-    # Convert to numpy array
-    np_vectors = np.array(vectors, dtype=np.float32)
-    
-    # Start with the first vector
-    selected_indices = [0]
-    
-    # Iteratively add the most diverse vector
-    while len(selected_indices) < count:
-        max_min_distance = -1
-        next_index = -1
-        
-        # For each candidate vector
-        for i in range(len(np_vectors)):
-            if i in selected_indices:
-                continue  # Skip already selected vectors
-                
-            # Calculate minimum distance to any selected vector
-            min_distance = float('inf')
-            for j in selected_indices:
-                sim = cosine_similarity(np_vectors[i], np_vectors[j])
-                distance = 1.0 - sim  # Convert similarity to distance
-                min_distance = min(min_distance, distance)
+        if vectors.shape[1] <= n_components:
+            return vectors, None
             
-            # If this vector is more diverse than current best
-            if min_distance > max_min_distance:
-                max_min_distance = min_distance
-                next_index = i
+        pca = PCA(n_components=n_components)
+        reduced = pca.fit_transform(vectors)
         
-        # Add most diverse vector
-        if next_index != -1:
-            selected_indices.append(next_index)
-    
-    return selected_indices
+        return reduced, pca
+        
+    except ImportError:
+        raise ImportError("sklearn is not available. Install with 'pip install scikit-learn'")
 
-
-def detect_outliers(vectors: List[List[float]], threshold: float = 1.5) -> List[int]:
+def transform_with_pca(vectors: np.ndarray, pca_model: Any) -> np.ndarray:
     """
-    Detect outlier vectors based on distance from centroid.
+    Transform vectors using a pre-fitted PCA model.
     
     Args:
-        vectors: List of vectors to analyze
-        threshold: Standard deviation threshold for outlier detection
+        vectors: Input vectors (2D array)
+        pca_model: Fitted PCA model from apply_pca
         
     Returns:
-        List[int]: Indices of outlier vectors
+        Reduced vectors
     """
-    if not vectors or len(vectors) < 2:
-        return []
+    if pca_model is None:
+        return vectors
         
-    # Convert to numpy array
-    np_vectors = np.array(vectors, dtype=np.float32)
-    
-    # Calculate centroid
-    centroid = np.mean(np_vectors, axis=0)
-    
-    # Calculate distances from centroid using Euclidean distance
-    distances = np.linalg.norm(np_vectors - centroid, axis=1)
-    
-    # Convert distances to z-scores for better outlier detection
-    std_dist = np.std(distances)
-    
-    if std_dist == 0:  # Avoid division by zero if all vectors are identical
-        return []
-    
-    outlier_indices = []
-    for i, dist in enumerate(distances):
-        if dist > threshold * std_dist:
-            outlier_indices.append(i)
-    
-    return outlier_indices
+    return pca_model.transform(vectors)
 
+# Vector cache utilities
+class VectorCache:
+    """Simple in-memory vector cache with LRU eviction policy."""
+    
+    def __init__(self, max_size: int = 1000):
+        """
+        Initialize vector cache.
+        
+        Args:
+            max_size: Maximum number of items in cache
+        """
+        self.max_size = max_size
+        self.cache = {}  # key -> (vector, timestamp)
+        self.access_order = []  # LRU order (least recently used at front)
+        
+    def get(self, key: str) -> Optional[np.ndarray]:
+        """
+        Get vector from cache.
+        
+        Args:
+            key: Cache key
+            
+        Returns:
+            Vector or None if not in cache
+        """
+        if key in self.cache:
+            # Move to end (most recently used)
+            self._update_access(key)
+            return self.cache[key][0]
+        return None
+        
+    def put(self, key: str, vector: np.ndarray) -> None:
+        """
+        Put vector into cache.
+        
+        Args:
+            key: Cache key
+            vector: Vector to cache
+        """
+        if key in self.cache:
+            self.cache[key] = (vector, time.time())
+            self._update_access(key)
+        else:
+            # Evict if at capacity
+            if len(self.cache) >= self.max_size:
+                self._evict()
+                
+            # Add new item
+            self.cache[key] = (vector, time.time())
+            self.access_order.append(key)
+            
+    def _update_access(self, key: str) -> None:
+        """Update LRU access order."""
+        if key in self.access_order:
+            self.access_order.remove(key)
+        self.access_order.append(key)
+        
+    def _evict(self) -> None:
+        """Evict least recently used item."""
+        if self.access_order:
+            lru_key = self.access_order.pop(0)
+            if lru_key in self.cache:
+                del self.cache[lru_key]
+                
+    def clear(self) -> None:
+        """Clear the cache."""
+        self.cache.clear()
+        self.access_order.clear()
+        
+    def __len__(self) -> int:
+        """Get number of items in cache."""
+        return len(self.cache)
 
-def compute_vector_stats(vectors: List[List[float]]) -> Dict[str, Any]:
-    """
-    Compute statistical properties of a collection of vectors.
-    
-    Args:
-        vectors: List of vectors to analyze
-        
-    Returns:
-        Dict: Statistical properties including:
-            - dim: Dimensionality
-            - mean: Mean vector
-            - variance: Variance across dimensions
-            - min_magnitude: Minimum vector magnitude
-            - max_magnitude: Maximum vector magnitude
-            - avg_magnitude: Average vector magnitude
-    """
-    if not vectors:
-        return {
-            "dim": 0,
-            "count": 0,
-            "mean": [],
-            "variance": [],
-            "min_magnitude": 0,
-            "max_magnitude": 0,
-            "avg_magnitude": 0
-        }
-        
-    # Convert to numpy array
-    np_vectors = np.array(vectors, dtype=np.float32)
-    
-    # Compute statistics
-    dim = np_vectors.shape[1]
-    mean_vec = np.mean(np_vectors, axis=0)
-    variance = np.var(np_vectors, axis=0)
-    
-    # Compute magnitudes
-    magnitudes = np.linalg.norm(np_vectors, axis=1)
-    min_mag = float(np.min(magnitudes))
-    max_mag = float(np.max(magnitudes))
-    avg_mag = float(np.mean(magnitudes))
-    
-    return {
-        "dim": int(dim),
-        "count": len(vectors),
-        "mean": mean_vec.tolist(),
-        "variance": variance.tolist(),
-        "min_magnitude": min_mag,
-        "max_magnitude": max_mag,
-        "avg_magnitude": avg_mag
-    }
+# Global vector cache instance
+vector_cache = VectorCache()

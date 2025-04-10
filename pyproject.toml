@@ -38,9 +38,13 @@ dependencies = [
     "tqdm>=4.67.1", # progress bar for long-running tasks
     # Machine learning
     "scikit-learn>=1.6.1", # vector operations and ML utilities
-    "scipy>=1.15.2",
+    "scipy>=1.15.2", # scientific computing and advanced math
+    "spacy>=3.8.5", # NLP library for text processing
+    "hnswlib>=0.8.0", # approximate nearest neighbor search
+    "annoy>=1.17.3", # approximate nearest neighbor search
     # RAG and LLMs
     "llama-index>=0.12.28", # RAG framework
+    "llama-index-readers-web>=0.3.9", # Web reader for LlamaIndex
     "llama-index-readers-json>=0.3.0", # JSON reader for LlamaIndex
     "llama-index-experimental>=0.5.4", # Experimental features
     "langchain>=0.3.23", # text chunking and RAG pipelines
@@ -61,9 +65,9 @@ dev = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/yourusername/oarc-rag"
-"Bug Tracker" = "https://github.com/yourusername/oarc-rag/issues"
-"Repository" = "https://github.com/yourusername/oarc-rag.git"
+"Homepage" = "https://github.com/ollama-agent-roll-cage/oarc-rag"
+"Bug Tracker" = "https://github.com/ollama-agent-roll-cage/oarc-rag/issues"
+"Repository" = "https://github.com/ollama-agent-roll-agent/oarc-rag.git"
 
 [project.scripts]
 oarc-rag = "oarc_rag.main:main"
