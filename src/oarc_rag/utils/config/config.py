@@ -9,10 +9,24 @@ recursive RAG architecture described in the specification.
 import os
 import json
 from pathlib import Path
-from typing import Dict, Any, Union, Optional, List
+from typing import Dict, Any, Optional, List
 
 from oarc_rag.utils.decorators.singleton import singleton
 from oarc_rag.utils.log import log
+from oarc_rag.utils.const import (
+    DEFAULT_MODEL,
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_OLLAMA_URL,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_OPERATIONAL_MODE,
+    DEFAULT_HNSW_EF_CONSTRUCTION,
+    DEFAULT_HNSW_EF_SEARCH,
+    DEFAULT_HNSW_M,
+    SUPPORTED_FILE_EXTENSIONS
+)
 
 
 @singleton
@@ -54,20 +68,20 @@ class Config:
             'templates_dir': Path(os.getenv('OARC_RAG_TEMPLATES_DIR', base_dir / 'templates')),
             
             # AI settings
-            'model': os.getenv('OARC_RAG_AI_MODEL', 'llama3.1:latest'),
-            'temperature': float(os.getenv('OARC_RAG_AI_TEMP', '0.7')),
-            'max_tokens': int(os.getenv('OARC_RAG_AI_MAX_TOKENS', '4000')),
-            'ollama_api_url': os.getenv('OARC_RAG_OLLAMA_URL', 'http://localhost:11434'),
-            'default_model': os.getenv('OARC_RAG_DEFAULT_MODEL', 'llama3.1:latest'),
+            'model': os.getenv('OARC_RAG_AI_MODEL', DEFAULT_MODEL),
+            'temperature': float(os.getenv('OARC_RAG_AI_TEMP', str(DEFAULT_TEMPERATURE))),
+            'max_tokens': int(os.getenv('OARC_RAG_AI_MAX_TOKENS', str(DEFAULT_MAX_TOKENS))),
+            'ollama_api_url': os.getenv('OARC_RAG_OLLAMA_URL', DEFAULT_OLLAMA_URL),
+            'default_model': os.getenv('OARC_RAG_DEFAULT_MODEL', DEFAULT_MODEL),
             'default_system_prompt': os.getenv('OARC_RAG_SYSTEM_PROMPT', 'rag_system'),
             'default_api_timeout': int(os.getenv('OARC_RAG_API_TIMEOUT', '60')),
             
             # RAG settings
-            'embedding_model': os.getenv('OARC_RAG_EMBEDDING_MODEL', 'llama3.1:latest'),
+            'embedding_model': os.getenv('OARC_RAG_EMBEDDING_MODEL', DEFAULT_EMBEDDING_MODEL),
             'embedding_model_type': os.getenv('OARC_RAG_EMBEDDING_TYPE', 'ollama'),
             'embedding_dimensions': int(os.getenv('OARC_RAG_EMBEDDING_DIMENSIONS', '4096')),
-            'chunk_size': int(os.getenv('OARC_RAG_CHUNK_SIZE', '512')),
-            'chunk_overlap': int(os.getenv('OARC_RAG_CHUNK_OVERLAP', '50')),
+            'chunk_size': int(os.getenv('OARC_RAG_CHUNK_SIZE', str(DEFAULT_CHUNK_SIZE))),
+            'chunk_overlap': int(os.getenv('OARC_RAG_CHUNK_OVERLAP', str(DEFAULT_CHUNK_OVERLAP))),
             'retrieval_top_k': int(os.getenv('OARC_RAG_RETRIEVAL_TOP_K', '5')),
             'similarity_threshold': float(os.getenv('OARC_RAG_SIMILARITY_THRESHOLD', '0.7')),
             'semantic_reranking': os.getenv('OARC_RAG_SEMANTIC_RERANKING', 'false').lower() == 'true',
@@ -86,9 +100,9 @@ class Config:
             # HNSW settings (from Specification.md)
             'hnsw': {
                 'enabled': os.getenv('OARC_RAG_USE_HNSW', 'true').lower() == 'true',
-                'ef_construction': int(os.getenv('OARC_RAG_HNSW_EF_CONSTRUCTION', '200')),
-                'ef_search': int(os.getenv('OARC_RAG_HNSW_EF_SEARCH', '50')),
-                'm': int(os.getenv('OARC_RAG_HNSW_M', '16')),
+                'ef_construction': int(os.getenv('OARC_RAG_HNSW_EF_CONSTRUCTION', str(DEFAULT_HNSW_EF_CONSTRUCTION))),
+                'ef_search': int(os.getenv('OARC_RAG_HNSW_EF_SEARCH', str(DEFAULT_HNSW_EF_SEARCH))),
+                'm': int(os.getenv('OARC_RAG_HNSW_M', str(DEFAULT_HNSW_M))),
                 'index_path': os.getenv('OARC_RAG_HNSW_INDEX_PATH', str(base_dir / 'data' / 'hnsw_index')),
                 'automatic_pruning': os.getenv('OARC_RAG_HNSW_AUTO_PRUNE', 'true').lower() == 'true'
             },
@@ -114,7 +128,7 @@ class Config:
             
             # Operational modes (from Big_Brain.md)
             'operational_modes': {
-                'default_mode': os.getenv('OARC_RAG_DEFAULT_MODE', 'awake'),
+                'default_mode': os.getenv('OARC_RAG_DEFAULT_MODE', DEFAULT_OPERATIONAL_MODE),
                 'auto_switch': os.getenv('OARC_RAG_AUTO_MODE_SWITCH', 'true').lower() == 'true',
                 'awake_timeout': int(os.getenv('OARC_RAG_AWAKE_TIMEOUT', '3600')),  # 1 hour default
                 'sleep_cycle_duration': int(os.getenv('OARC_RAG_SLEEP_DURATION', '1800')),  # 30 mins default
@@ -198,12 +212,7 @@ class Config:
             },
             
             # Supported file types for sources
-            'supported_file_extensions': [
-                '.txt', '.md', '.tex', '.rst', '.html',
-                '.py', '.js', '.java', '.cpp', '.c',
-                '.json', '.yaml', '.yml', '.csv',
-                '.pdf', '.docx', '.pptx', '.xlsx'
-            ],
+            'supported_file_extensions': SUPPORTED_FILE_EXTENSIONS,
             
             # Security settings
             'security': {
@@ -224,20 +233,21 @@ class Config:
         
     def _merge_settings(self, defaults: Dict[str, Any]) -> None:
         """
-        Merge default settings with those from config file.
+        Merge default settings with loaded settings.
         
         Args:
             defaults: Default settings dictionary
         """
+        # Deep merge settings with defaults
         for key, value in defaults.items():
             if key not in self.settings:
                 self.settings[key] = value
             elif isinstance(value, dict) and isinstance(self.settings[key], dict):
-                # For nested settings, recursively merge
+                # Recursively merge nested dictionaries
                 for inner_key, inner_value in value.items():
                     if inner_key not in self.settings[key]:
                         self.settings[key][inner_key] = inner_value
-        
+                        
     def _create_required_dirs(self) -> None:
         """Create required directories."""
         dirs_to_create = [
@@ -252,7 +262,7 @@ class Config:
                 Path(directory).mkdir(parents=True, exist_ok=True)
             except Exception as e:
                 log.warning(f"Failed to create directory {directory}: {e}")
-    
+                
     def save_config(self, file_path: Optional[str] = None) -> None:
         """
         Save current configuration to a file.
@@ -300,72 +310,79 @@ class Config:
         self._initialized = False
         self.__init__()
         log.info("Configuration reset to defaults")
-    
+        
     @staticmethod
     def get(key: str, default: Any = None) -> Any:
         """
-        Get a configuration value by key.
+        Get a configuration value.
         
         Args:
-            key: Configuration key (supports dot notation for nested settings)
-            default: Default value if key not found
+            key: Configuration key (use dot notation for nested keys: 'vector.use_pca')
+            default: Default value if key doesn't exist
             
         Returns:
-            Any: Configuration value
+            Configuration value or default
         """
         config = Config()
-        
-        # Handle nested keys with dot notation
-        if '.' in key:
-            parts = key.split('.')
-            value = config.settings
+        if '.' not in key:
+            return config.settings.get(key, default)
             
-            for part in parts:
-                if isinstance(value, dict) and part in value:
-                    value = value[part]
-                else:
-                    return default
-            
-            return value
+        # Handle nested keys
+        parts = key.split('.')
+        current = config.settings
+        for part in parts:
+            if isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                return default
+                
+        return current
         
-        return config.settings.get(key, default)
-    
+    @staticmethod
+    def set(key: str, value: Any) -> None:
+        """
+        Set a configuration value.
+        
+        Args:
+            key: Configuration key (use dot notation for nested keys)
+            value: Value to set
+        """
+        config = Config()
+        if '.' not in key:
+            config.settings[key] = value
+            return
+            
+        # Handle nested keys
+        parts = key.split('.')
+        current = config.settings
+        for i, part in enumerate(parts[:-1]):
+            if part not in current or not isinstance(current[part], dict):
+                current[part] = {}
+            current = current[part]
+            
+        current[parts[-1]] = value
+        
     @staticmethod
     def update(updates: Dict[str, Any]) -> None:
         """
-        Update configuration settings.
+        Update multiple configuration values.
         
         Args:
-            updates: Dictionary of settings to update (supports nested updates)
+            updates: Dictionary of updates
         """
-        config = Config()
-        
         for key, value in updates.items():
-            # Handle nested keys with dot notation
-            if '.' in key:
-                parts = key.split('.')
-                settings = config.settings
-                
-                # Navigate to the right nested dictionary
-                for part in parts[:-1]:
-                    if part not in settings:
-                        settings[part] = {}
-                    settings = settings[part]
-                
-                settings[parts[-1]] = value
-            else:
-                config.settings[key] = value
-    
+            Config.set(key, value)
+            
     @staticmethod
     def get_all() -> Dict[str, Any]:
         """
         Get all configuration settings.
         
         Returns:
-            Dict[str, Any]: All configuration settings
+            Dict with all settings
         """
-        return Config().settings
-    
+        return Config().settings.copy()
+        
     @staticmethod
     def get_base_dir() -> Path:
         """Get the base directory path."""
@@ -399,20 +416,20 @@ class Config:
     @staticmethod
     def add_supported_file_extension(extension: str) -> None:
         """
-        Add a file extension to the supported list.
+        Add a new supported file extension.
         
         Args:
-            extension: File extension to add (with dot, e.g., '.docx')
+            extension: File extension to add (with or without dot)
         """
-        if not extension.startswith('.'):
-            extension = f'.{extension}'
+        ext = extension if extension.startswith('.') else f'.{extension}'
+        if ext not in Config().settings['supported_file_extensions']:
+            Config().settings['supported_file_extensions'].append(ext)
             
-        config = Config()
-        extensions = config.settings['supported_file_extensions']
-        if extension not in extensions:
-            extensions.append(extension)
-            config.settings['supported_file_extensions'] = extensions
-            
+    @staticmethod
+    def get_supported_file_extensions() -> List[str]:
+        """Get the list of supported file extensions."""
+        return Config().settings['supported_file_extensions']
+        
     @staticmethod
     def get_agent_config(agent_type: str) -> Dict[str, Any]:
         """
@@ -422,13 +439,10 @@ class Config:
             agent_type: Type of agent (rag_agent, expansion_agent, etc.)
             
         Returns:
-            Dict[str, Any]: Agent configuration
+            Dict with agent configuration
         """
-        config = Config()
-        if agent_type in config.settings.get('agents', {}):
-            return config.settings['agents'][agent_type]
-        return {}
-    
+        return Config().settings['agents'].get(agent_type, {})
+        
     @staticmethod
     def get_operation_mode() -> str:
         """
@@ -474,7 +488,7 @@ class Config:
             Dict[str, Any]: Vector operations configuration
         """
         return Config().settings['vector']
-    
+        
     @staticmethod
     def get_hnsw_config() -> Dict[str, Any]:
         """
@@ -484,44 +498,44 @@ class Config:
             Dict[str, Any]: HNSW configuration
         """
         return Config().settings['hnsw']
-    
+        
     @staticmethod
     def is_visualization_enabled() -> bool:
         """
         Check if visualization is enabled.
         
         Returns:
-            bool: True if visualization is enabled
+            bool: True if enabled
         """
         return Config().settings['visualization']['enabled']
-    
+        
     @staticmethod
     def is_gpu_enabled() -> bool:
         """
         Check if GPU usage is enabled.
         
         Returns:
-            bool: True if GPU usage is enabled
+            bool: True if enabled
         """
         return Config().settings['hardware']['use_gpu']
-    
+        
     @staticmethod
     def is_api_enabled() -> bool:
         """
         Check if API is enabled.
         
         Returns:
-            bool: True if API is enabled
+            bool: True if enabled
         """
         return Config().settings['api']['enabled']
-    
+        
     @staticmethod
     def should_use_semantic_reranking() -> bool:
         """
-        Check if semantic reranking should be used.
+        Check if semantic reranking is enabled.
         
         Returns:
-            bool: True if semantic reranking should be used
+            bool: True if enabled
         """
         return Config().settings['semantic_reranking']
 

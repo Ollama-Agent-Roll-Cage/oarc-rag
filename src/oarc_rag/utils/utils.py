@@ -3,13 +3,17 @@ General utility functions for the oarc_rag project.
 """
 import os
 import sys
+import re
 import platform
 import tempfile
+import json
+import requests
 from pathlib import Path
 from datetime import datetime
 from typing import Any, List, Dict, Union, TypeVar, Tuple, Optional
 
 from oarc_rag.utils.log import log
+from oarc_rag.utils.const import DEFAULT_OLLAMA_URL
 
 # Type variable for generic functions
 T = TypeVar('T')
@@ -21,37 +25,37 @@ class Utils:
     @staticmethod
     def safe_to_int(value: Any, default: int = 0) -> int:
         """
-        Safely convert a value to integer with fallback.
+        Safely convert a value to int.
         
         Args:
             value: Value to convert
             default: Default value if conversion fails
             
         Returns:
-            int: Converted integer or default value
+            int: Converted value or default
         """
         try:
             return int(value)
         except (ValueError, TypeError):
             return default
-
+    
     @staticmethod
     def safe_to_float(value: Any, default: float = 0.0) -> float:
         """
-        Safely convert a value to float with fallback.
+        Safely convert a value to float.
         
         Args:
             value: Value to convert
             default: Default value if conversion fails
             
         Returns:
-            float: Converted float or default value
+            float: Converted value or default
         """
         try:
             return float(value)
         except (ValueError, TypeError):
             return default
-
+    
     @staticmethod
     def find_files_by_extensions(
         root_dir: Union[str, Path], 
@@ -59,37 +63,38 @@ class Utils:
         skip_hidden: bool = True
     ) -> List[Path]:
         """
-        Find all files with specific extensions under a directory.
+        Find files with specific extensions in a directory.
         
         Args:
-            root_dir: Root directory to search in
-            extensions: List of file extensions to include (with dot)
+            root_dir: Directory to search
+            extensions: List of file extensions to find (with or without dot)
             skip_hidden: Whether to skip hidden files and directories
             
         Returns:
-            List[Path]: List of found file paths
+            List[Path]: List of file paths
         """
-        root_path = Path(root_dir)
         result = []
+        root_path = Path(root_dir)
         
-        if not root_path.exists():
-            return result
+        # Normalize extensions to always have a dot prefix
+        norm_extensions = [ext if ext.startswith('.') else f'.{ext}' for ext in extensions]
         
         try:
-            for path in root_path.rglob('*'):
-                # Skip hidden items if requested
-                if skip_hidden and any(p.startswith('.') for p in path.parts):
-                    continue
+            for ext in norm_extensions:
+                for path in root_path.glob(f'**/*{ext}'):
+                    # Skip hidden files/directories if requested
+                    if skip_hidden and any(part.startswith('.') for part in path.parts):
+                        continue
                     
-                if path.is_file() and path.suffix.lower() in extensions:
-                    result.append(path)
+                    if path.is_file():
+                        result.append(path)
+                        
         except PermissionError:
-            # Handle permission errors gracefully
             log.warning(f"Permission denied when accessing {root_path}")
             pass
                     
         return result
-
+    
     @staticmethod
     def get_app_dirs() -> Dict[str, Path]:
         """
@@ -128,63 +133,75 @@ class Utils:
             'data': data_dir,
             'temp': Path(tempfile.gettempdir()) / app_name
         }
-
+    
     @staticmethod
     def get_system_info() -> Dict[str, str]:
         """
-        Get system information for diagnostics.
+        Get system information.
         
         Returns:
             Dict[str, str]: System information
         """
-        return {
-            'platform': platform.platform(),
-            'python_version': platform.python_version(),
-            'system': platform.system(),
-            'machine': platform.machine(),
-            'processor': platform.processor(),
-            'node': platform.node()
+        info = {
+            "os": platform.system(),
+            "os_version": platform.version(),
+            "python_version": platform.python_version(),
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "processor": platform.processor()
         }
-
+        
+        # Add CUDA info if available
+        cuda_available, cuda_version = Utils.detect_gpu()
+        info["cuda_available"] = str(cuda_available)
+        if cuda_version:
+            info["cuda_version"] = cuda_version
+            
+        return info
+    
     @staticmethod
     def get_timestamp(format_str: str = '%Y%m%d_%H%M%S') -> str:
         """
-        Get a formatted timestamp string.
+        Get current timestamp as formatted string.
         
         Args:
-            format_str: Format string for datetime.strftime
+            format_str: Timestamp format
             
         Returns:
             str: Formatted timestamp
         """
         return datetime.now().strftime(format_str)
-
+    
     @staticmethod
     def sanitize_filename(filename: str) -> str:
         """
         Sanitize a string to be used as a filename.
         
         Args:
-            filename: Original filename
+            filename: Input string
             
         Returns:
             str: Sanitized filename
         """
         # Replace invalid characters with underscores
-        invalid_chars = '<>:"/\\|?*'
-        for char in invalid_chars:
-            filename = filename.replace(char, '_')
+        sanitized = re.sub(r'[\\/*?:"<>|]', '_', filename)
         
-        # Trim spaces and limit length
-        filename = filename.strip()
-        max_length = 255
-        if len(filename) > max_length:
-            name, ext = os.path.splitext(filename)
-            name = name[:max_length - len(ext)]
-            filename = name + ext
+        # Collapse multiple underscores
+        sanitized = re.sub(r'_+', '_', sanitized)
+        
+        # Trim leading/trailing underscores and whitespace
+        sanitized = sanitized.strip('_ ')
+        
+        # Ensure we have at least one character
+        if not sanitized:
+            sanitized = 'unnamed'
             
-        return filename
-
+        # Truncate if too long (max 255 chars for most filesystems)
+        if len(sanitized) > 200:
+            sanitized = sanitized[:197] + '...'
+            
+        return sanitized
+    
     @staticmethod
     def check_for_ollama(raise_error: bool = False) -> bool:
         """
@@ -199,20 +216,17 @@ class Utils:
         Raises:
             RuntimeError: If raise_error is True and Ollama is not available
         """
-        import requests
-        from urllib.parse import urljoin
-        
-        base_url = "http://localhost:11434"
+        base_url = DEFAULT_OLLAMA_URL
         
         try:
-            # Try to connect to Ollama API
-            response = requests.get(base_url, timeout=5)
+            response = requests.get(f"{base_url}/api/version", timeout=5)
             if response.status_code == 200:
+                log.debug(f"Ollama server is available: {response.json()}")
                 return True
-            
+                
             error_msg = (
-                "Ollama server is not available or returned an unexpected response. "
-                "Please ensure Ollama is installed, running, and responding correctly. "
+                f"Ollama server returned status code {response.status_code}. "
+                "Please ensure Ollama is installed and running. "
                 "Visit https://ollama.ai/download for installation instructions."
             )
             if raise_error:
@@ -227,97 +241,152 @@ class Utils:
             if raise_error:
                 raise RuntimeError(error_msg)
             return False
-
+    
     @staticmethod
     def validate_ollama_model(model_name: str, ollama_url: str = "http://localhost:11434", raise_error: bool = True) -> bool:
         """
-        Validate if a model exists in Ollama.
+        Validate that an Ollama model exists and is available.
         
         Args:
-            model_name: Name of the model to validate
-            ollama_url: URL of the Ollama API
-            raise_error: Whether to raise an error if the model is not found
+            model_name: Model name to validate
+            ollama_url: Ollama API URL
+            raise_error: Whether to raise an error if model is not available
             
         Returns:
-            bool: True if model exists, False otherwise
+            bool: True if model is available, False otherwise
             
         Raises:
-            RuntimeError: If raise_error is True and model does not exist
+            RuntimeError: If raise_error is True and model is not available
         """
-        import requests
-        
         try:
-            # First check if Ollama is available
-            if not Utils.check_for_ollama(raise_error=False):
-                if raise_error:
-                    raise RuntimeError(f"Cannot validate model '{model_name}': Ollama server is not available")
-                return False
-                
-            # Then check if the model exists
-            response = requests.post(
-                f"{ollama_url}/api/show", 
-                json={"name": model_name},
-                timeout=5
-            )
-            
-            if response.status_code == 200:
-                return True
-            else:
-                error_msg = f"Model '{model_name}' not found in Ollama"
+            response = requests.get(f"{ollama_url}/api/tags", timeout=10)
+            if response.status_code != 200:
+                error_msg = f"Failed to list Ollama models. Status code: {response.status_code}"
                 if raise_error:
                     raise RuntimeError(error_msg)
-                log.warning(error_msg)
                 return False
-        except Exception as e:
+                
+            models_data = response.json()
+            models = [m.get('name') for m in models_data.get('models', [])]
+            
+            # Check if model_name exists exactly or as a prefix (e.g., llama3:latest)
+            for m in models:
+                if m == model_name or m.startswith(f"{model_name}:"):
+                    return True
+                    
+            # Model not found
+            error_msg = f"Model '{model_name}' not found in Ollama. Available models: {', '.join(models)}"
             if raise_error:
-                raise RuntimeError(f"Error validating model '{model_name}': {e}")
-            log.warning(f"Error validating model '{model_name}': {e}")
+                raise RuntimeError(error_msg)
             return False
-
+            
+        except requests.RequestException as e:
+            error_msg = f"Error connecting to Ollama server: {e}"
+            if raise_error:
+                raise RuntimeError(error_msg)
+            return False
+    
     @staticmethod
     def get_available_ollama_models(ollama_url: str = "http://localhost:11434") -> List[str]:
         """
-        Get a list of available models from Ollama.
+        Get list of available Ollama models.
         
         Args:
-            ollama_url: URL of the Ollama API
+            ollama_url: Ollama API URL
             
         Returns:
             List[str]: List of available model names
-        """
-        import requests
-        
-        try:
-            if not Utils.check_for_ollama(raise_error=False):
-                return []
-                
-            response = requests.get(f"{ollama_url}/api/tags", timeout=5)
             
-            if response.status_code == 200:
-                data = response.json()
-                return [model['name'] for model in data.get('models', [])]
-            else:
-                return []
-        except Exception as e:
-            log.warning(f"Error getting available models: {e}")
-            return []
-
+        Raises:
+            RuntimeError: If failed to get models
+        """
+        try:
+            response = requests.get(f"{ollama_url}/api/tags", timeout=10)
+            if response.status_code != 200:
+                raise RuntimeError(f"Failed to list Ollama models. Status code: {response.status_code}")
+                
+            models_data = response.json()
+            return [m.get('name') for m in models_data.get('models', [])]
+                
+        except requests.RequestException as e:
+            raise RuntimeError(f"Error connecting to Ollama server: {e}")
+    
     @staticmethod
     def detect_gpu() -> Tuple[bool, Optional[str]]:
         """
-        Detect if GPU is available for FAISS acceleration.
+        Detect if GPU (CUDA) is available and get version.
         
         Returns:
-            Tuple[bool, Optional[str]]: (GPU available, reason if not available)
+            Tuple[bool, Optional[str]]: (is_available, version_string)
         """
+        # Try to detect CUDA with nvidia-smi
         try:
-            # Only import if needed to avoid dependency issues
+            import subprocess
+            output = subprocess.check_output(['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader'],
+                                            stderr=subprocess.DEVNULL)
+            version = output.decode('utf-8').strip()
+            return True, version
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass
+            
+        # Try to detect with PyTorch if available
+        try:
             import torch
             if torch.cuda.is_available():
-                return True, None
-            else:
-                return False, "CUDA not available in torch"
+                return True, f"CUDA {torch.version.cuda}"
         except ImportError:
-            return False, "PyTorch not installed or CUDA not available"
-        except Exception as e:
-            return False, f"Error checking GPU: {e}"
+            pass
+            
+        return False, None
+    
+    @staticmethod
+    def load_jsonl(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+        """
+        Load data from a JSONL file.
+        
+        Args:
+            file_path: Path to JSONL file
+            
+        Returns:
+            List[Dict[str, Any]]: List of records from JSONL
+            
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            ValueError: If file format is invalid
+        """
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+            
+        data = []
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:  # Skip empty lines
+                        data.append(json.loads(line))
+            return data
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSONL format in {file_path}: {e}")
+    
+    @staticmethod
+    def save_jsonl(data: List[Dict[str, Any]], file_path: Union[str, Path]) -> None:
+        """
+        Save data to a JSONL file.
+        
+        Args:
+            data: List of records to save
+            file_path: Output file path
+            
+        Raises:
+            ValueError: If data format is invalid
+        """
+        path = Path(file_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                for record in data:
+                    f.write(json.dumps(record) + '\n')
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Invalid data format: {e}")
