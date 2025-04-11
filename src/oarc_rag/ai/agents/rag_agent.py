@@ -4,26 +4,27 @@ RAG-enhanced agent for retrieval-augmented content generation.
 This module provides a domain-agnostic agent that leverages the RAG system
 to enhance content generation with relevant retrieved context across any domain.
 """
+import json
+import re
 import time
-import numpy as np
-from typing import Any, Dict, List, Optional, Union, Tuple
 from collections import Counter
+from typing import Any, Dict, List, Optional, Union
 
-from oarc_rag.utils.log import log
-from oarc_rag.ai.agent import Agent, OperationalMode, CognitivePhase
-from oarc_rag.core.engine import Engine
+from oarc_rag.ai.agent import OperationalMode
+from oarc_rag.ai.agents.base_agent import RAGAgent
+from oarc_rag.core.cache import cache_manager
 from oarc_rag.core.context import ContextAssembler
+from oarc_rag.core.engine import Engine
 from oarc_rag.core.query import QueryFormulator
-from oarc_rag.ai.client import OllamaClient
-from oarc_rag.ai.prompts import PromptTemplateManager
-from oarc_rag.core.cache import cache_manager, ContextCache
+from oarc_rag.utils.log import log
+from oarc_rag.utils.utils import Utils
 
 
-class RAGAgent(Agent):
+class RAGEnhancedAgent(RAGAgent):
     """
     Domain-agnostic agent with RAG enhancement capabilities for content generation.
     
-    This class extends the basic Agent to incorporate retrieval-augmented
+    This class extends the RAGAgent to incorporate advanced retrieval-augmented
     generation features for enhanced content generation across any domain.
     Implements concepts from the recursive self-improving RAG framework.
     """
@@ -37,10 +38,13 @@ class RAGAgent(Agent):
         query_formulator: Optional[QueryFormulator] = None,
         temperature: float = 0.7,
         max_tokens: int = 1000,
-        operational_mode: str = "awake",  # Supports "awake" or "sleep" phase
+        version: str = "1.0",
+        operational_mode: Union[str, OperationalMode] = "awake",  # Supports "awake" or "sleep" phase
         enable_semantic_reranking: bool = True,
         use_vector_quantization: bool = False,  # From Specification.md
-        pca_dimensions: Optional[int] = None    # From Specification.md
+        pca_dimensions: Optional[int] = None,    # From Specification.md
+        auto_cycle: bool = True,
+        cycle_interval: int = 3600
     ):
         """
         Initialize a domain-agnostic RAG-enhanced agent.
@@ -53,30 +57,50 @@ class RAGAgent(Agent):
             query_formulator: Formulator for query generation
             temperature: Temperature setting for generation
             max_tokens: Maximum tokens for generation
+            version: Agent version string
             operational_mode: Agent operational mode ("awake" for real-time, "sleep" for deep processing)
             enable_semantic_reranking: Whether to use semantic reranking for results
             use_vector_quantization: Whether to use vector quantization for memory optimization
             pca_dimensions: Number of dimensions to use for PCA reduction (None for no reduction)
+            auto_cycle: Whether to automatically cycle between operational modes
+            cycle_interval: Seconds between operational mode transitions
         """
-        super().__init__(name, model, temperature, max_tokens, operational_mode=operational_mode)
+        # Prepare prompt templates for different purposes
+        prompt_templates = {
+            'retrieval': 'vector_search',
+            'query_reformulation': 'query_reformulation',
+            'context_presentation': 'context_presentation',
+            'semantic_reranking': 'context_presentation',
+            'awake_phase': 'awake_phase',
+            'sleep_phase': 'sleep_phase_enrichment',
+            'response_generation': 'rag_system'
+        }
+        
+        # Initialize base agent with multiple templates
+        super().__init__(
+            name=name,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            version=version,
+            operational_mode=operational_mode,
+            auto_cycle=auto_cycle,
+            cycle_interval=cycle_interval,
+            prompt_templates=prompt_templates,
+            default_template='rag_system'
+        )
         
         # RAG components
         self.rag_engine = rag_engine
         self.context_assembler = context_assembler or ContextAssembler()
         self.query_formulator = query_formulator or QueryFormulator()
         
-        # Create Ollama client
-        self.client = OllamaClient(default_model=model)
-        
         # Advanced vector options from Specification.md
         self.enable_semantic_reranking = enable_semantic_reranking
         self.use_vector_quantization = use_vector_quantization
         self.pca_dimensions = pca_dimensions
         
-        # Initialize prompt template manager
-        self.prompt_manager = PromptTemplateManager()
-        
-        # Get context cache from cache manager
+        # Get context cache
         self.context_cache = cache_manager.context_cache
         
         # Enhanced retrieval statistics
@@ -101,9 +125,11 @@ class RAGAgent(Agent):
             "weak_areas": set(),  # Topics with poor retrieval performance
         }
         
-        # Initialize sleep/awake components based on mode
+        # Initialize mode-specific components
         self._initialize_mode_components()
         
+        log.info(f"RAGEnhancedAgent {name} initialized in {operational_mode} mode")
+            
     def _initialize_mode_components(self) -> None:
         """Initialize components based on operational mode."""
         if self.operational_mode == OperationalMode.SLEEP:
@@ -118,14 +144,12 @@ class RAGAgent(Agent):
         # Adjust for deep processing
         self.enable_semantic_reranking = True
         self.context_assembler.set_optimization_level("high")
-        self.set_cognitive_phase(CognitivePhase.CONSOLIDATION)
         
     def _configure_for_awake_mode(self) -> None:
         """Configure for awake (responsive) mode."""
         # Adjust for responsiveness
         self.context_assembler.set_optimization_level("low")
-        self.set_cognitive_phase(CognitivePhase.REACTIVE)
-        
+    
     def _semantic_rerank(
         self, 
         results: List[Dict[str, Any]], 
@@ -150,9 +174,9 @@ class RAGAgent(Agent):
             # Extract text from results for the reranking prompt
             result_texts = [{"text": r["text"][:200], "index": i} for i, r in enumerate(results)]
             
-            # Generate reranking prompt using Jinja2 template
-            reranking_prompt = self.prompt_manager.render(
-                "semantic_reranking",
+            # Generate reranking prompt using template system
+            reranking_prompt = self.render_prompt_template(
+                purpose="semantic_reranking",
                 query=query,
                 results=result_texts
             )
@@ -163,16 +187,21 @@ class RAGAgent(Agent):
             # Parse the response to extract the ranking
             # Expected format is a list like [3, 1, 5, 2, 4]
             try:
-                # Find list pattern in response
-                import re
-                match = re.search(r'\[([\d\s,]+)\]', reranking_response)
-                if not match:
-                    log.warning("Could not parse reranking response, using original order")
-                    return results
-                    
-                # Parse the list of indices
-                indices_str = match.group(1)
-                indices = [int(idx) for idx in indices_str.split(',') if idx.strip().isdigit()]
+                # Use Utils function to extract JSON from text
+                parsed_data = Utils.extract_json_from_text(reranking_response)
+                
+                if not parsed_data or "ranking" not in parsed_data:
+                    # Fallback to regex parsing
+                    match = re.search(r'\[([\d\s,]+)\]', reranking_response)
+                    if not match:
+                        log.warning("Could not parse reranking response, using original order")
+                        return results
+                        
+                    # Parse the list of indices
+                    indices_str = match.group(1)
+                    indices = [int(idx) for idx in indices_str.split(',') if idx.strip().isdigit()]
+                else:
+                    indices = parsed_data["ranking"]
                 
                 # Adjust indices (model might use 1-based indexing)
                 indices = [idx - 1 if idx >= 1 else idx for idx in indices]
@@ -204,50 +233,6 @@ class RAGAgent(Agent):
         except Exception as e:
             log.warning(f"Semantic reranking failed: {e}, using original order")
             return results
-            
-    def _apply_vector_operations(self, vectors: List[List[float]]) -> List[List[float]]:
-        """
-        Apply advanced vector operations from Specification.md.
-        
-        Args:
-            vectors: Original vectors
-            
-        Returns:
-            Processed vectors
-        """
-        if not vectors:
-            return vectors
-            
-        # Convert to numpy for operations
-        np_vectors = np.array(vectors)
-        
-        # Apply PCA dimensionality reduction if configured
-        if self.pca_dimensions is not None and self.pca_dimensions > 0:
-            try:
-                from sklearn.decomposition import PCA
-                if np_vectors.shape[1] > self.pca_dimensions:
-                    pca = PCA(n_components=self.pca_dimensions)
-                    np_vectors = pca.fit_transform(np_vectors)
-                    self.retrieval_stats["dimensionality_reductions"] += 1
-                    self.log_activity(
-                        f"Applied PCA reduction: {vectors[0][:5]} → {np_vectors[0][:5]}"
-                    )
-            except ImportError:
-                log.warning("sklearn not available, skipping PCA reduction")
-            except Exception as e:
-                log.warning(f"PCA reduction failed: {e}")
-                
-        # Apply vector quantization if configured
-        if self.use_vector_quantization:
-            try:
-                # Simple scalar quantization: convert to float16
-                np_vectors = np_vectors.astype(np.float16).astype(np.float32)
-                self.retrieval_stats["vector_quantizations"] += 1
-            except Exception as e:
-                log.warning(f"Vector quantization failed: {e}")
-                
-        # Convert back to list format
-        return np_vectors.tolist()
     
     def retrieve_context(
         self,
@@ -287,22 +272,44 @@ class RAGAgent(Agent):
             raise RuntimeError("RAG engine not initialized. Call set_rag_engine() first.")
         
         # Check for auto-transition between modes
-        self.check_cycle_transition()
+        self.check_and_switch_modes()
         
         # Check cache first if enabled
-        if use_cache:
-            cached_context = self.context_cache.get_context(query, topic, query_type, additional_context)
-            if cached_context:
-                self.log_activity("Using cached context")
-                return cached_context
+        cache_key = f"{query}:{topic}:{query_type}:{str(additional_context)}"
+        if use_cache and cache_key in self.context_cache:
+            self.log_activity("Using cached context")
+            return self.context_cache[cache_key]
         
         # If explicit query is not provided, formulate one based on topic and type
         if not query and topic:
-            query = self.query_formulator.formulate_query(
-                topic=topic,
-                query_type=query_type,
-                additional_context=additional_context
+            # Use the query reformulation template if available
+            reformulation_prompt = self.render_prompt_template(
+                purpose="query_reformulation",
+                original_query=topic,
+                domain_context=additional_context or {}
             )
+            
+            reformulated_queries = self.generate(reformulation_prompt)
+            
+            # Try to extract JSON array of queries
+            try:
+                queries = Utils.extract_json_from_text(reformulated_queries)
+                if isinstance(queries, list) and queries:
+                    query = queries[0]  # Use first query
+                else:
+                    # Fallback to query formulator
+                    query = self.query_formulator.formulate_query(
+                        topic=topic,
+                        query_type=query_type,
+                        additional_context=additional_context
+                    )
+            except:
+                # Fallback to query formulator
+                query = self.query_formulator.formulate_query(
+                    topic=topic,
+                    query_type=query_type,
+                    additional_context=additional_context
+                )
         elif not query and not topic:
             raise ValueError("Either query or topic must be provided")
         
@@ -344,20 +351,14 @@ class RAGAgent(Agent):
         retrieval_time = time.time() - start_time
         
         # Assemble context from chunks with appropriate strategy
-        if self.operational_mode == OperationalMode.SLEEP:
-            # In sleep mode, use more comprehensive context assembly
-            context = self.context_assembler.assemble_context(
-                chunks=results,
-                deduplicate=deduplicate,
-                include_metadata=True,
-                coherence_optimization=True
-            )
-        else:
-            # In awake mode, use faster context assembly
-            context = self.context_assembler.assemble_context(
-                chunks=results,
-                deduplicate=deduplicate
-            )
+        template_purpose = "sleep_phase" if self.operational_mode == OperationalMode.SLEEP else "context_presentation"
+        
+        context = self.context_assembler.assemble_context(
+            chunks=results,
+            deduplicate=deduplicate,
+            include_metadata=self.operational_mode == OperationalMode.SLEEP,
+            coherence_optimization=self.operational_mode == OperationalMode.SLEEP
+        )
         
         # Update retrieval statistics
         self.retrieval_stats["calls"] += 1
@@ -370,9 +371,9 @@ class RAGAgent(Agent):
             self.retrieval_stats["total_retrieval_time"] / self.retrieval_stats["calls"]
         )
         
-        # Cache the result
+        # Cache the result if caching is enabled
         if use_cache:
-            self.context_cache.add_context(query, topic, query_type, additional_context, context)
+            self.context_cache[cache_key] = context
         
         # Log retrieval stats
         self.log_activity(
@@ -420,10 +421,31 @@ class RAGAgent(Agent):
             "avg_context_length": self.retrieval_stats["total_chunks"] / max(1, self.retrieval_stats["calls"])
         }
         
+        # Use sleep phase template to generate consolidation insights
+        consolidation_prompt = self.render_prompt_template(
+            purpose="sleep_phase",
+            cycle_number=self.cycle_count,
+            data_summary=json.dumps(self.retrieval_stats, indent=2),
+            focus_areas=[
+                {"name": "Retrieval Optimization", "description": "Improve retrieval accuracy and relevance"},
+                {"name": "Vector Relationships", "description": "Enhance semantic connections between chunks"},
+                {"name": "Knowledge Gaps", "description": "Identify areas with incomplete information"}
+            ],
+            access_statistics=json.dumps(dict(self.knowledge_metrics["chunk_frequency"].most_common(20)), indent=2),
+            previous_cycle_results=json.dumps(parent_results.get("cycle_results", {}), indent=2)
+        )
+        
+        # Generate consolidation insights
+        consolidation_response = self.generate(consolidation_prompt)
+        
+        # Try to extract structured data from response
+        consolidation_data = Utils.extract_json_from_text(consolidation_response)
+        
         # Merge metrics
         consolidated_results = {
             **parent_results,
-            "rag_metrics": rag_metrics
+            "rag_metrics": rag_metrics,
+            "cycle_results": consolidation_data or {"raw_response": consolidation_response}
         }
         
         self.log_activity(f"RAG knowledge consolidation complete: identified {len(weak_retrieval_topics)} areas for improvement")
@@ -438,23 +460,7 @@ class RAGAgent(Agent):
         """
         self.rag_engine = engine
         self.log_activity("RAG engine set")
-        
-    def set_operational_mode(self, mode: str) -> None:
-        """
-        Set the agent's operational mode.
-        
-        Args:
-            mode: "awake" for real-time interaction or "sleep" for deep processing
-            
-        Raises:
-            ValueError: If mode is not recognized
-        """
-        if mode not in ("awake", "sleep"):
-            raise ValueError('Operational mode must be either "awake" or "sleep"')
-            
-        self.operational_mode = mode
-        self.log_activity(f"Operational mode set to: {mode}")
-        
+    
     def create_enhanced_prompt(
         self,
         base_prompt: str,
@@ -496,7 +502,19 @@ class RAGAgent(Agent):
             top_k=top_k
         )
         
-        # Incorporate context based on strategy
+        # Try to use the context presentation template first
+        try:
+            enhanced_prompt = self.render_prompt_template(
+                purpose="context_presentation",
+                query=base_prompt,
+                formatted_chunks=context
+            )
+            return enhanced_prompt
+        except Exception as e:
+            # Fallback to manual context insertion based on strategy
+            self.log_activity(f"Failed to use template for context presentation: {e}", level="warning")
+        
+        # Incorporate context based on strategy (fallback approach)
         if context_strategy == "prefix":
             # Context before prompt (traditional RAG approach)
             enhanced_prompt = f"Context information:\n\n{context}\n\nBased on the above context, {base_prompt}"
@@ -542,41 +560,7 @@ class RAGAgent(Agent):
             enhanced_prompt = f"Context information:\n\n{context}\n\nBased on the above context, {base_prompt}"
         
         return enhanced_prompt
-        
-    def generate(self, prompt: str) -> str:
-        """
-        Generate content based on a prompt.
-        
-        Args:
-            prompt: Prompt to generate from
-            
-        Returns:
-            str: Generated content
-        """
-        self.log_activity(f"Generating content for prompt of length {len(prompt)}")
-        
-        start_time = time.time()
-        
-        # Generate response using Ollama
-        response = self.client.generate(
-            prompt=prompt,
-            model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens
-        )
-        
-        # Update statistics
-        generation_time = time.time() - start_time
-        # Rough token count estimation
-        tokens_used = len(prompt.split()) + len(response.split())
-        self.update_stats(tokens_used, generation_time)
-        
-        self.log_activity(
-            f"Generated {len(response)} chars in {generation_time:.3f}s"
-        )
-        
-        return response
-        
+    
     def process(self, input_data: Dict[str, Any]) -> str:
         """
         Process input data and produce output using RAG enhancement.
@@ -631,7 +615,7 @@ class RAGAgent(Agent):
         # Generate content
         result = self.generate(enhanced_prompt)
         
-        # Store result
+        # Store result in agent memory
         self.store_result("last_generation", result)
         self.store_metadata("last_process_inputs", {
             "query_type": query_type,
@@ -640,29 +624,6 @@ class RAGAgent(Agent):
         })
         
         return result
-    
-    def evaluate_retrieval_quality(self, query: str, results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Evaluate the quality of retrieved results for self-improvement.
-        
-        Args:
-            query: The query used for retrieval
-            results: The retrieved results
-            
-        Returns:
-            Dict[str, Any]: Quality metrics
-        """
-        # This implements concepts from Big_Brain.md for self-improvement
-        # For now, returns a simple metric
-        if not results:
-            return {"relevance_score": 0.0, "diversity_score": 0.0}
-            
-        # In a real implementation, this would use the agent to evaluate results
-        return {
-            "relevance_score": 0.85,  # Placeholder
-            "diversity_score": 0.7,   # Placeholder  
-            "retrieval_count": len(results)
-        }
     
     def get_retrieval_stats(self) -> Dict[str, Any]:
         """
@@ -676,5 +637,5 @@ class RAGAgent(Agent):
     def clear_context_cache(self) -> None:
         """Clear the context cache to free memory."""
         cache_size = len(self.context_cache)
-        self.context_cache = {}
+        self.context_cache.clear()
         self.log_activity(f"Cleared context cache ({cache_size} entries)")

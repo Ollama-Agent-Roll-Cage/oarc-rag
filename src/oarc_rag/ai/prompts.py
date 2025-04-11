@@ -7,190 +7,690 @@ Templates are designed to work across any domain, not tied to specific applicati
 """
 import json
 import re
-import os
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Any, Dict, List, Optional
 
-import jinja2
-from jinja2 import Environment, FileSystemLoader, select_autoescape, BaseLoader, Template
+from jinja2 import Template
 from llama_index.experimental.query_engine import PandasQueryEngine
 
+from oarc_rag.core.cache import cache_manager
+from oarc_rag.utils.config.config import Config
 from oarc_rag.utils.decorators.singleton import singleton
 from oarc_rag.utils.log import log
-from oarc_rag.utils.config.config import Config
-from oarc_rag.core.cache import cache_manager, TemplateCache
+from oarc_rag.utils.paths import Paths
 
 
 @singleton
 class PromptTemplateManager:
     """
     Class for managing prompt templates for AI generation using Jinja2.
+    
+    This manager handles templates for RAG system operations including:
+    - Standard RAG interactions
+    - Vector search and pandas-based operations
+    - Recursive self-improvement cycles
+    - Agent operations for content enhancement
+    - Resource-optimized operations for constrained environments
     """
     
-    # Template for system context in RAG conversations
+    # ------------- STANDARD RAG TEMPLATES -------------
+    
+    # Template for system context in RAG conversations - significantly enhanced
     RAG_SYSTEM_TEMPLATE = """
-    You are an AI assistant equipped with a retrieval-augmented generation (RAG) system.
-    You can access relevant documents and data to answer questions about any topic.
+    You are an AI assistant with advanced RAG (Retrieval-Augmented Generation) capabilities.
+
+    Core Instructions:
+    1. Ground ALL responses in the retrieved context ONLY - never fabricate information
+    2. When citing information, use the format (Chunk X) where X is the chunk number
+    3. If the context doesn't address the query, clearly acknowledge this gap
+    4. Structure longer responses with clear headings and bullet points for readability
+    5. Maintain a {{ tone }} communication style throughout your responses
     
-    When responding:
-    - Use the retrieved context to inform your answers when available
-    - Cite sources when information comes from specific documents
-    - Acknowledge when you're unsure or when the retrieval system doesn't provide relevant information
-    - Present information in a clear, structured way
-    - Focus on giving accurate, helpful information based on the provided context
-    - Maintain a {{ tone }} tone in responses
-    
-    Your goal is to provide accurate, helpful responses enhanced by retrieved information.
+    Remember: Your primary value is factual accuracy and relevant synthesis of the provided context.
     """
     
-    # Template for query reformulation to improve retrieval
+    # Template for query reformulation to improve retrieval - optimized for better vector search
     QUERY_REFORMULATION_TEMPLATE = """
-    I need to find relevant information about the following query:
-    "{{ original_query }}"
+    TASK: Generate optimized queries for HNSW vector search
     
-    To improve retrieval results, please convert this into a more effective search query by:
-    1. Identifying key concepts and terminology
-    2. Adding synonyms for important terms
-    3. Focusing on specific aspects rather than general questions
-    4. Including any relevant technical terms mentioned
-    5. Removing unnecessary words and fillers
-    
+    Original query: "{{ original_query }}"
     Domain context: {{ domain_context }}
-    {% if related_queries %}Previous related queries: {{ related_queries }}{% endif %}
+    {% if related_queries %}Previous queries: {{ related_queries }}{% endif %}
+    
+    Generate 3 alternative search queries:
+    1. First query: Expand with domain-specific terminology
+    2. Second query: Focus on key concepts with synonyms
+    3. Third query: Reformulate as a precise technical question
+    
+    Each query should:
+    - Use specific technical terms over general language
+    - Include key entities and relationships
+    - Remove filler words and focus on content terms
+    - Be self-contained and complete
+    
+    Output format (JSON array only):
+    ```json
+    ["specific query 1", "specific query 2", "specific query 3"]
+    ```    
     """
     
-    # Template for presenting retrieved context in conversation
+    # Template for presenting retrieved context in conversation - enhanced for better synthesis
     CONTEXT_PRESENTATION_TEMPLATE = """
-    Based on retrieved information:
+    TASK: Answer question using retrieved information
     
+    Retrieved context:
     {{ formatted_chunks }}
     
-    Use these relevant passages to address the following question:
-    {{ query }}
+    User question: "{{ query }}"
     
-    Provide a comprehensive answer that synthesizes information from the retrieved content.
-    Cite specific sources when drawing from particular chunks.
+    Response requirements:
+    1. Synthesize information ONLY from the retrieved chunks
+    2. Cite all factual statements using parenthetical citations (Chunk X)
+    3. Present information in a logical, structured format
+    4. If multiple chunks contain related information, synthesize them coherently
+    5. If chunks contain conflicting information, acknowledge the discrepancies
+    6. If the retrieved information doesn't answer the question, clearly state this
+    
+    Begin your response with a direct answer, followed by supporting details from the context.
     """
     
-    # Template for data analysis results
-    DATA_ANALYSIS_TEMPLATE = """
-    Here's the data analysis for your query "{{ query }}":
+    # Template for pandas data analysis results - improved structure
+    PANDAS_DATA_ANALYSIS_TEMPLATE = """
+    DATA ANALYSIS RESULT
     
+    Query: "{{ query }}"
+    
+    Data:
     {{ formatted_data }}
     
     Key insights:
-    - {{ insight_1 }}
-    - {{ insight_2 }}
-    - {{ insight_3 }}
+    1. {{ insight_1 }}
+    2. {{ insight_2 }}
+    3. {{ insight_3 }}
     
-    Would you like me to explain any specific aspect of these results in more detail?
+    These insights were derived using pandas DataFrame operations. Would you like me to explain any specific aspect in detail?
     """
     
-    # Template for summarizing lengthy chunks
-    CHUNK_SUMMARIZATION_TEMPLATE = """
-    Summarize the following information in a concise way while preserving key details:
+    # Template for vector search result formatting - clearer structure
+    VECTOR_SEARCH_TEMPLATE = """
+    VECTOR SEARCH RESULTS
     
-    "{{ chunk_content }}"
+    Query: "{{ query }}"
+    Method: Two-tier HNSW with PCA dimensionality reduction
+    Threshold: {{ threshold }}
+    {% if source_filter %}Sources filtered to: {{ source_filter }}{% endif %}
     
-    Create a summary that:
-    1. Captures essential facts and concepts
-    2. Maintains technical accuracy
-    3. Is approximately {{ target_length }} words long
-    4. Focuses on aspects relevant to {{ focus_area }}
-    """
-    
-    # Template for agent handoff with context
-    AGENT_HANDOFF_TEMPLATE = """
-    [AGENT HANDOFF: {{ source_agent }} → {{ target_agent }}]
-    
-    QUERY: {{ original_query }}
-    
-    RETRIEVED CONTEXT:
-    {{ context_summary }}
-    
-    ACTIONS TAKEN:
-    {{ previous_actions }}
-    
-    NEXT STEPS:
-    {{ recommended_actions }}
-    
-    ADDITIONAL NOTES:
-    {{ notes }}
-    """
-    
-    # Template for vector search result formatting
-    SEARCH_RESULTS_TEMPLATE = """
-    Based on your query "{{ query }}", I found the following relevant information:
-    
+    Results:
     {{ formatted_results }}
-    
-    These results were selected based on semantic similarity to your question.
     """
     
-    # Template for operational mode transition (from Big_Brain.md concepts)
-    MODE_TRANSITION_TEMPLATE = """
-    [System Notification: Transitioning from {{ previous_mode }} to {{ new_mode }} mode]
+    # ------------- PANDAS-SPECIFIC TEMPLATES -------------
     
-    During this transition, the system will:
-    1. {{ transition_action_1 }}
-    2. {{ transition_action_2 }} 
-    3. {{ transition_action_3 }}
+    # Template for pandas DataFrame query operations - maximally clear
+    PANDAS_QUERY_TEMPLATE = """
+    TASK: Convert natural language to pandas code
     
-    This process enables continuous self-improvement through iterative refinement as
-    described in the recursive self-improving RAG framework.
+    Question: "{{ question }}"
     
-    Estimated completion time: {{ estimated_time }}
+    DataFrame info:
+    - Columns: {{ column_names }}
+    - Types: {{ data_types }}
+    - Rows: {{ row_count }}
+    
+    Requirements:
+    1. Generate executable pandas code only
+    2. Do not include explanations
+    3. Use efficient pandas operations
+    
+    Format (Python code only):
+    ```python
+    result = df.[operations]
+    ```
     """
-
-    # Template for semantic reranking of search results 
-    SEMANTIC_RERANKING_TEMPLATE = """
-    Please analyze the following search results for relevance to the query: "{{ query }}"
     
-    {% for result in results %}
-    [{{ loop.index }}] {{ result.text | truncate(200) }}
+    # Template for sleep phase data enrichment - optimized for better knowledge synthesis
+    SLEEP_PHASE_ENRICHMENT_TEMPLATE = """
+    TASK: Sleep Phase Knowledge Enhancement (Cycle {{ cycle_number }})
+    
+    Data summary:
+    {{ data_summary }}
+    
+    Focus areas:
+    {% for area in focus_areas %}
+    • {{ area.name }}: {{ area.description }}
     {% endfor %}
     
-    Provide a ranking of the result indices from most to least relevant, considering:
-    - Direct relevance to the query
-    - Information quality and completeness
-    - Factual accuracy
+    Access statistics:
+    {{ access_statistics }}
     
-    Format your response exactly like this: [1, 5, 2, 4, 3]
-    """
+    Previous cycle improvements:
+    {{ previous_cycle_results }}
     
-    # Template for knowledge consolidation during sleep phase
-    KNOWLEDGE_CONSOLIDATION_TEMPLATE = """
-    [SLEEP PHASE KNOWLEDGE CONSOLIDATION]
+    Your objective is to analyze usage patterns and enhance the knowledge representation through:
     
-    Previous interactions to analyze:
-    {% for interaction in interactions %}
-    INTERACTION {{ loop.index }}:
-    Query: {{ interaction.query }}
-    Response: {{ interaction.response | truncate(200) }}
-    {% endfor %}
+    1. PATTERN IDENTIFICATION:
+      - Identify recurring patterns in user queries
+      - Detect conceptual relationships between knowledge fragments
+      - Discover knowledge gaps based on user interaction patterns
+      - Map frequently co-accessed information
     
-    CONSOLIDATION OBJECTIVES:
-    1. Identify recurring themes or topics
-    2. Detect knowledge gaps in previous responses
-    3. Propose improvements for future interactions
-    4. Recommend knowledge areas to enhance
+    2. VECTOR REPRESENTATION OPTIMIZATION:
+      - Suggest dimension adjustments for optimal semantic clustering
+      - Identify candidates for PCA-based optimization
+      - Recommend threshold adjustments based on usage patterns
+      - Highlight redundant or overlapping vector representations
     
-    Provide a structured analysis optimized for improving the RAG system's performance.
-    """
+    3. KNOWLEDGE ENHANCEMENT:
+      - Identify ambiguous content needing clarification
+      - Suggest content for expansion or compression
+      - Propose connections between isolated knowledge fragments
+      - Recommend pruning of rarely accessed, low-value content
     
-    # Version tracking for templates
-    TEMPLATE_VERSIONS = {
-        "rag_system": "1.1",
-        "query_reformulation": "1.1", 
-        "context_presentation": "1.1",
-        "data_analysis": "1.1",
-        "chunk_summarization": "1.1",
-        "agent_handoff": "1.1",
-        "search_results": "1.1",
-        "mode_transition": "1.1",
-        "semantic_reranking": "1.0",
-        "knowledge_consolidation": "1.0"
+    Output format:
+    ```json
+    {
+      "patterns_identified": [
+        {
+          "pattern": "Pattern description",
+          "confidence": 0.85,
+          "supporting_evidence": "Evidence from data",
+          "cross_connections": ["Related concept 1", "Related concept 2"],
+          "action_recommendation": "merge|expand|prune|split"
+        }
+      ],
+      "vector_optimizations": [
+        {
+          "chunk_group": "Description of relevant chunks",
+          "current_dimensions": 128,
+          "recommended_dimensions": 64,
+          "expected_improvement": "12% faster retrieval, 40% less storage",
+          "similarity_adjustment": "+0.05 threshold for this domain"
+        }
+      ],
+      "knowledge_gaps": [
+        {
+          "topic": "Specific missing information",
+          "priority": "high|medium|low",
+          "exploration_strategy": "Approach to fill this gap",
+          "potential_impact": "Expected benefit of addressing",
+          "agent_assignment": "expansion_agent|merge_agent"
+        }
+      ],
+      "content_actions": [
+        {
+          "chunk_ids": ["id1", "id2"],
+          "recommended_action": "merge|split|expand|prune",
+          "rationale": "Why this action is recommended",
+          "priority": 0.9
+        }
+      ],
+      "cycle_metrics": {
+        "processed_chunks": 250,
+        "identified_actions": 15,
+        "expected_improvement": "13% relevance increase, 8% storage reduction"
+      }
     }
+    ```
+    """
+    
+    # Template for awake phase cognitive processing with enhanced memory tracking
+    AWAKE_PHASE_TEMPLATE = """
+    TASK: Real-Time Processing with Learning Markers
+    
+    Query: "{{ query }}"
+    
+    System parameters:
+    - Priority: {{ knowledge_priority }}
+    - Monitoring: {{ monitoring_status }}
+    - Latency: {{ latency_level }}
+    - Learning cycle: {{ cycle_count }}
+    
+    User context:
+    {{ user_context }}
+    
+    Retrieved knowledge:
+    {{ retrieved_knowledge }}
+    
+    Instructions:
+    1. Generate a direct response to the user query
+    2. Identify knowledge gaps and uncertainties
+    3. Create learning markers for sleep phase processing
+    4. Note access patterns and information relationships
+    5. Maintain awareness of recursive improvement history
+    
+    Output format:
+    ```json
+    {
+      "response": "Your direct answer to the user query",
+      "learning_markers": [
+        {"concept": "Concept requiring enrichment", "confidence": 0.75, "importance": 0.85, "gap_type": "ambiguity|missing_context|conflicting_info"},
+        {"concept": "Another concept", "confidence": 0.60, "importance": 0.90, "gap_type": "missing_context"}
+      ],
+      "access_patterns": [
+        {"chunk_id": "id1", "access_count": 3, "relationship_strength": 0.8},
+        {"chunk_id": "id2", "access_count": 1, "relationship_strength": 0.4}
+      ],
+      "metadata": {
+        "processing_time_ms": 150,
+        "vector_ops_count": 12,
+        "improvement_cycle": {{ cycle_count }}
+      }
+    }
+    ```
+    """
+    
+    # Template for elastic weight consolidation (EWC) parameter importance tracking
+    EWC_PARAMETER_IMPORTANCE_TEMPLATE = """
+    TASK: Elastic Weight Consolidation Parameter Analysis
+    
+    Current knowledge base:
+    - Total chunks: {{ chunk_count }}
+    - Vector dimensions: {{ vector_dimensions }}
+    - Active parameters: {{ parameter_count }}
+    
+    Usage statistics:
+    {{ usage_statistics }}
+    
+    Knowledge retention requirements:
+    {{ retention_requirements }}
+    
+    Instructions:
+    1. Analyze parameter importance across the knowledge base
+    2. Identify critical parameters that must be preserved
+    3. Flag parameters that can be modified with minimal impact
+    4. Suggest consolidation strategy for balanced retention
+    
+    Output format:
+    ```json
+    {
+      "parameter_importance": [
+        {"parameter_group": "Group description", "importance_score": 0.95, "retention_priority": "critical", "consolidation_approach": "strict_preservation"},
+        {"parameter_group": "Group description", "importance_score": 0.45, "retention_priority": "flexible", "consolidation_approach": "gradual_adaptation"}
+      ],
+      "consolidation_strategy": {
+        "critical_threshold": 0.80,
+        "preservation_weight": 0.75,
+        "adaptation_rate": 0.15,
+        "expected_retention_rate": 0.92
+      },
+      "parameter_map": {
+        "domain_specific": ["param1", "param2"],
+        "general_knowledge": ["param3", "param4"],
+        "structural": ["param5", "param6"]
+      }
+    }
+    ```
+    """
+    
+    # Template for hierarchical version archiving and checkpointing
+    HIERARCHICAL_VERSION_TEMPLATE = """
+    TASK: Create Knowledge Base Checkpoint (Version {{ version_number }})
+    
+    Current state:
+    - Parameters: {{ parameter_count }}
+    - Knowledge base: {{ kb_size }}
+    - Performance metrics: {{ performance_metrics }}
+    - Improvement cycle: {{ cycle_number }}
+    
+    Changes since last version:
+    {{ change_summary }}
+    
+    Instructions:
+    1. Create comprehensive checkpoint of current system state
+    2. Generate backward-compatible parameter mapping
+    3. Establish granular backtrack points for selective rollback
+    4. Optimize storage through intelligent compression
+    
+    Output format:
+    ```json
+    {
+      "checkpoint": {
+        "version": "{{ version_number }}",
+        "timestamp": "{{ timestamp }}",
+        "description": "Concise description of this version",
+        "parent_version": "{{ parent_version }}",
+        "cycle_number": {{ cycle_number }}
+      },
+      "parameter_snapshot": {
+        "critical_parameters": {"count": 250, "compression_ratio": 0.85},
+        "flexible_parameters": {"count": 750, "compression_ratio": 0.65},
+        "ewc_importance_map": "map_reference_id"
+      },
+      "backtrack_points": [
+        {"id": "bt_1", "description": "Pre-domain expansion", "component": "vector_db"},
+        {"id": "bt_2", "description": "Before threshold adjustment", "component": "retrieval"}
+      ],
+      "storage_optimization": {
+        "compression_method": "method name",
+        "original_size_kb": 1250,
+        "compressed_size_kb": 320,
+        "decompression_overhead_ms": 15
+      },
+      "compatibility": {
+        "minimum_compatible_version": "2.3",
+        "breaking_changes": false,
+        "migration_path": "direct|incremental"
+      }
+    }
+    ```
+    """
+    
+    # Template for expansion agent with improved context awareness
+    EXPANSION_AGENT_TEMPLATE = """
+    TASK: Content Expansion with Vector Awareness
+    
+    Content to expand:
+    {{ content }}
+    
+    Expansion objectives:
+    {% for objective in expansion_objectives %}
+    • {{ objective }}
+    {% endfor %}
+    
+    Vector neighborhood context:
+    {{ vector_neighborhood }}
+    
+    Information gap analysis:
+    {{ gap_analysis }}
+    
+    Quality requirements:
+    - Ensure factual accuracy with high confidence
+    - Maintain semantic coherence with surrounding content
+    - Preserve vector space relationship integrity
+    - Add detail and clarity while maintaining conciseness
+    - Maximum expansion ratio: {{ max_expansion_factor }}×
+    
+    Output format:
+    ```json
+    {
+      "expanded_content": "The fully expanded text content",
+      "rationale": "Explanation of expansion approach and decisions",
+      "confidence": 0.92,
+      "vector_impact_assessment": {
+        "expected_similarity_to_original": 0.85,
+        "neighborhood_preservation": 0.95,
+        "query_match_improvement": ["query type 1", "query type 2"]
+      },
+      "metadata": {
+        "expansion_factor": 1.8,
+        "added_concepts": ["concept1", "concept2"],
+        "information_sources": ["source1", "source2"]
+      }
+    }
+    ```
+    """
+    
+    # Template for merge agent with semantic relationship preservation
+    MERGE_AGENT_TEMPLATE = """
+    TASK: Content Merging with Semantic Preservation
+    
+    Content fragments to merge:
+    {% for fragment in fragments %}
+    --- FRAGMENT {{ loop.index }} ---
+    {{ fragment.text }}
+    
+    Vector properties:
+    - Centroid distance: {{ fragment.centroid_distance }}
+    - Key concepts: {{ fragment.key_concepts|join(', ') }}
+    
+    {% endfor %}
+    
+    Vector space constraints:
+    {{ vector_constraints }}
+    
+    Merge objectives:
+    {{ merge_objectives }}
+    
+    Instructions:
+    1. Analyze semantic relationships between fragments
+    2. Identify redundant content that can be consolidated
+    3. Resolve any contradictions or inconsistencies
+    4. Create a unified representation preserving all unique information
+    5. Maintain vector space relationships with adjacent content
+    6. Ensure the merged content satisfies all identified query patterns
+    
+    Output format:
+    ```json
+    {
+      "merged_content": "The fully merged text content",
+      "merge_decisions": [
+        {"fragments": [1, 3], "strategy": "complementary_fusion", "rationale": "Explanation"},
+        {"fragments": [2], "strategy": "contradiction_resolution", "rationale": "Explanation"}
+      ],
+      "content_preservation": {
+        "score": 0.95,
+        "unrepresented_content": "Any content that couldn't be preserved",
+        "enhanced_connections": 3
+      },
+      "vector_properties": {
+        "expected_centroid": [0.1, 0.2, 0.3, "..."],
+        "semantic_relationships_preserved": 0.9,
+        "query_coverage": 0.95
+      }
+    }
+    ```
+    """
+    
+    # Template for split agent with optimal chunking strategies
+    SPLIT_AGENT_TEMPLATE = """
+    TASK: Adaptive Content Splitting for Optimal Retrieval
+    
+    Content to split:
+    {{ content }}
+    
+    Current retrieval performance:
+    {{ retrieval_metrics }}
+    
+    Content analysis:
+    {{ content_analysis }}
+    
+    Chunk optimization goals:
+    - Create semantically coherent units
+    - Maintain information completeness within chunks
+    - Optimize for retrieval of complete answers to common queries
+    - Balance chunk size for vector embedding quality
+    - Preserve natural conceptual boundaries
+    
+    Target parameters:
+    - Target chunk count: {{ chunk_count }}
+    - Optimal tokens per chunk: {{ chunk_size }}
+    - Minimum semantic coherence: {{ min_coherence }}
+    - Maximum information fragmentation: {{ max_fragmentation }}
+    
+    Output format:
+    ```json
+    {
+      "chunks": [
+        {
+          "content": "First chunk content",
+          "estimated_tokens": 238,
+          "main_topic": "Clear description of main topic",
+          "semantic_coherence": 0.92,
+          "key_concepts": ["concept1", "concept2"]
+        },
+        {
+          "content": "Second chunk content",
+          "estimated_tokens": 256,
+          "main_topic": "Clear description of main topic",
+          "semantic_coherence": 0.88,
+          "key_concepts": ["concept3", "concept4"]
+        }
+      ],
+      "splitting_rationale": "Explanation of the splitting strategy and decisions made",
+      "expected_improvements": {
+        "retrieval_accuracy": "+12%",
+        "query_coverage": "85% of expected queries fully addressed by single chunk",
+        "vector_quality": "Improved embedding separation with reduced internal conflicts"
+      },
+      "recommended_connections": [
+        {"from_chunk": 0, "to_chunk": 1, "relationship": "prerequisite"},
+        {"from_chunk": 1, "to_chunk": 0, "relationship": "elaboration"}
+      ]
+    }
+    ```
+    """
+    
+    # Template for prune agent with EWC-based importance assessment
+    PRUNE_AGENT_TEMPLATE = """
+    TASK: Content Pruning with Knowledge Preservation
+    
+    Content to prune:
+    {{ content }}
+    
+    Usage analytics:
+    {{ usage_analytics }}
+    
+    Knowledge importance assessment:
+    {{ importance_assessment }}
+    
+    Pruning constraints:
+    - Target reduction: {{ target_reduction_percentage }}%
+    - Critical knowledge preservation: {{ preservation_threshold }}
+    - Minimum semantic coherence: {{ min_coherence }}
+    - Maximum information density: {{ max_density }}
+    
+    Instructions:
+    1. Identify redundant, tangential, or low-value content
+    2. Preserve all critical information based on EWC importance scores
+    3. Maintain logical flow and readability
+    4. Prioritize retention of unique, high-demand information
+    5. Optimize for information-to-token ratio
+    
+    Output format:
+    ```json
+    {
+      "pruned_content": "The fully pruned text content",
+      "pruning_decisions": [
+        {
+          "removed_text": "Text that was removed",
+          "rationale": "Reason for removal",
+          "importance_score": 0.35,
+          "information_type": "redundant|tangential|low_value"
+        }
+      ],
+      "preservation_metrics": {
+        "critical_information_retention": 0.98,
+        "meaning_preservation": 0.95,
+        "readability_impact": "+5%",
+        "token_reduction": "35%"
+      },
+      "vector_impact": {
+        "expected_similarity_shift": 0.08,
+        "query_coverage_change": "-2% (negligible)",
+        "recommended_embedding_update": true
+      }
+    }
+    ```
+    """
+    
+    # Template for PCA-based dimensionality optimization
+    PCA_OPTIMIZATION_TEMPLATE = """
+    TASK: Vector Dimensionality Optimization
+    
+    Current vector configuration:
+    - Vectors: {{ vector_count }} × {{ current_dimensions }}
+    - Storage size: {{ storage_size }}
+    - Average search time: {{ avg_search_time }}ms
+    
+    Usage patterns:
+    {{ usage_patterns }}
+    
+    Performance requirements:
+    {{ performance_requirements }}
+    
+    Instructions:
+    1. Analyze semantic preservation requirements
+    2. Determine optimal dimensionality reduction
+    3. Calculate expected performance improvements
+    4. Recommend implementation strategy
+    
+    Output format:
+    ```json
+    {
+      "recommendation": {
+        "current_dimensions": {{ current_dimensions }},
+        "recommended_dimensions": 128,
+        "reduction_method": "pca|sparse_pca|incremental_pca",
+        "variance_preservation": 0.92
+      },
+      "expected_benefits": {
+        "storage_reduction": "75%",
+        "query_speedup": "65%",
+        "indexing_speedup": "45%"
+      },
+      "expected_costs": {
+        "one_time_processing_time": "45 minutes",
+        "accuracy_impact": "-2.5% (within acceptable limits)",
+        "reindexing_required": true
+      },
+      "implementation_strategy": {
+        "suggested_approach": "phased_implementation|complete_reindex|parallel_operation",
+        "verification_method": "random_query_sampling",
+        "rollback_plan": "store_original_vectors_for_30 days"
+      }
+    }
+    ```
+    """
+    
+    # Template for HNSW graph optimization based on usage patterns
+    HNSW_OPTIMIZATION_TEMPLATE = """
+    TASK: HNSW Graph Structure Optimization
+    
+    Current HNSW configuration:
+    - M: {{ M_value }} (max connections per layer)
+    - ef_construction: {{ ef_construction }} (search queue size during construction)
+    - ef_search: {{ ef_search }} (search queue size during search)
+    - Vector dimensions: {{ vector_dimensions }}
+    
+    Usage analytics:
+    {{ usage_analytics }}
+    
+    Performance metrics:
+    {{ performance_metrics }}
+    
+    Instructions:
+    1. Analyze query patterns and performance bottlenecks
+    2. Recommend optimal HNSW parameter adjustments
+    3. Estimate performance impacts of changes
+    4. Suggest implementation approach with minimal disruption
+    
+    Output format:
+    ```json
+    {
+      "parameter_recommendations": {
+        "M": {{ recommended_M }},
+        "ef_construction": {{ recommended_ef_construction }},
+        "ef_search": {{ recommended_ef_search }},
+        "num_layers": {{ recommended_layers }}
+      },
+      "expected_improvements": {
+        "average_query_time": "-35%",
+        "p99_latency": "-42%",
+        "recall_at_10": "+3%"
+      },
+      "implementation_plan": {
+        "approach": "incremental|full_rebuild|parallel",
+        "estimated_time": "127 minutes",
+        "resource_requirements": {
+          "cpu_cores": 4,
+          "memory_gb": 16,
+          "temporary_storage_gb": 8
+        }
+      },
+      "specialized_optimizations": [
+        {
+          "query_type": "keyword_heavy",
+          "custom_ef_search": 128,
+          "expected_improvement": "52%"
+        },
+        {
+          "query_type": "natural_language",
+          "custom_ef_search": 256,
+          "expected_improvement": "37%"
+        }
+      ]
+    }
+    ```
+    """
     
     def __init__(self):
         """Initialize the Jinja2 template environment."""
@@ -198,13 +698,17 @@ class PromptTemplateManager:
         if hasattr(self, '_initialized') and self._initialized:
             return
             
-        # Setup the Jinja2 environment
-        self.env = Environment(
-            loader=FileSystemLoader(self._get_templates_directory()),
-            autoescape=select_autoescape(['html', 'xml']),
-            trim_blocks=True,
-            lstrip_blocks=True
-        )
+        # Get configuration
+        self.config = Config()
+        
+        # Get template cache from cache manager
+        self.template_cache = cache_manager.template_cache
+            
+        # Get templates directory from paths module
+        self.templates_dir = Paths.get_templates_directory()
+        
+        # Use Paths API to create Jinja2 environment
+        self.env = Paths.create_template_environment(self.templates_dir)
         
         # Add custom filters
         self.env.filters['json'] = lambda obj: json.dumps(obj, indent=2)
@@ -216,15 +720,13 @@ class PromptTemplateManager:
         # Dictionary to cache template instances by name
         self._template_instances = {}
         
+        # Template categories for better organization
+        self._template_categories = self.get_template_categories()
+        
         # Tracking and statistics
         self.template_usage = {}
         self._initialized = True
-        
-    def _get_templates_directory(self) -> Path:
-        """Get or create the directory for storing template files."""
-        template_dir = Config.get_base_dir() / "templates"
-        os.makedirs(template_dir, exist_ok=True)
-        return template_dir
+        log.info(f"PromptTemplateManager initialized with templates directory: {self.templates_dir}")
     
     def _truncate_filter(self, value, length=80, killwords=False, end='...'):
         """Custom filter to truncate text."""
@@ -240,29 +742,53 @@ class PromptTemplateManager:
     def _register_builtin_templates(self):
         """Register the built-in templates."""
         builtin_templates = {
+            # Standard RAG templates
             'rag_system': self.RAG_SYSTEM_TEMPLATE,
             'query_reformulation': self.QUERY_REFORMULATION_TEMPLATE,
             'context_presentation': self.CONTEXT_PRESENTATION_TEMPLATE,
-            'data_analysis': self.DATA_ANALYSIS_TEMPLATE, 
-            'chunk_summarization': self.CHUNK_SUMMARIZATION_TEMPLATE,
-            'agent_handoff': self.AGENT_HANDOFF_TEMPLATE,
-            'search_results': self.SEARCH_RESULTS_TEMPLATE,
-            'mode_transition': self.MODE_TRANSITION_TEMPLATE,
-            'semantic_reranking': self.SEMANTIC_RERANKING_TEMPLATE,
-            'knowledge_consolidation': self.KNOWLEDGE_CONSOLIDATION_TEMPLATE
+            'pandas_data_analysis': self.PANDAS_DATA_ANALYSIS_TEMPLATE, 
+            'vector_search': self.VECTOR_SEARCH_TEMPLATE,
+            
+            # Pandas specific templates
+            'pandas_query': self.PANDAS_QUERY_TEMPLATE,
+            
+            # Recursive self-improvement templates
+            'awake_phase': self.AWAKE_PHASE_TEMPLATE,
+            'sleep_phase_enrichment': self.SLEEP_PHASE_ENRICHMENT_TEMPLATE,
+            'ewc_parameter_importance': self.EWC_PARAMETER_IMPORTANCE_TEMPLATE,
+            'hierarchical_version': self.HIERARCHICAL_VERSION_TEMPLATE,
+            
+            # Agent operation templates
+            'expansion_agent': self.EXPANSION_AGENT_TEMPLATE,
+            'merge_agent': self.MERGE_AGENT_TEMPLATE,
+            'split_agent': self.SPLIT_AGENT_TEMPLATE,
+            'prune_agent': self.PRUNE_AGENT_TEMPLATE,
+            
+            # Vector optimization templates
+            'pca_optimization': self.PCA_OPTIMIZATION_TEMPLATE,
+            'hnsw_optimization': self.HNSW_OPTIMIZATION_TEMPLATE,
         }
         
         # Add each template to the environment
         for name, template_text in builtin_templates.items():
             self.env.globals[name] = template_text
             
+            # Extract variables
+            variables = self._extract_variables(template_text)
+            
+            # Add to template cache
+            self.template_cache.add_template(
+                name=name,
+                template_object=self.env.from_string(template_text),
+                template_text=template_text,
+                variables=variables
+            )
+            
             # Create and cache template instance
-            template = self.env.from_string(template_text)
             self._template_instances[name] = {
-                'template': template,
+                'template': self.env.from_string(template_text),
                 'text': template_text,
-                'version': self.TEMPLATE_VERSIONS.get(name, '1.0'),
-                'variables': self._extract_variables(template_text),
+                'variables': variables,
                 'usage_count': 0,
                 'successful_uses': 0
             }
@@ -288,7 +814,7 @@ class PromptTemplateManager:
         
         # Combine all found variables
         return set(simple_vars + if_vars + for_vars)
-            
+
     def get_template(self, template_name: str) -> Template:
         """
         Get a Jinja2 template by name.
@@ -302,60 +828,43 @@ class PromptTemplateManager:
         Raises:
             ValueError: If template_name is not found
         """
-        # Check if we have a cached built-in template
-        if template_name in self._template_instances:
-            self._template_instances[template_name]['usage_count'] += 1
-            return self._template_instances[template_name]['template']
-            
-        # Try to load from filesystem
-        try:
-            return self.env.get_template(f"{template_name}.j2")
-        except jinja2.exceptions.TemplateNotFound:
-            valid_templates = ", ".join(self._template_instances.keys())
-            raise ValueError(f"Template '{template_name}' not found. Available templates: {valid_templates}")
+        if template_name not in self._template_instances:
+            raise ValueError(f"Template '{template_name}' not found.")
+        return self._template_instances[template_name]['template']
     
-    def register_template(self, name: str, template_text: str, version: str = "custom-1.0") -> None:
+    def register_template(self, name: str, template_text: str, 
+                          category: str = "custom") -> None:
         """
         Register a new template with the system.
         
         Args:
             name: Template name
             template_text: Template content
-            version: Template version
+            category: Template category for organization
             
         Raises:
             ValueError: If template is empty or invalid
         """
-        if not template_text or not template_text.strip():
-            raise ValueError("Cannot register empty template")
-            
-        try:
-            # Create Jinja2 template
-            template = self.env.from_string(template_text)
-            
-            # Extract variables
-            variables = self._extract_variables(template_text)
-            
-            # Store in cache
-            self._template_instances[name] = {
-                'template': template,
-                'text': template_text,
-                'version': version,
-                'variables': variables,
-                'usage_count': 0,
-                'successful_uses': 0
-            }
-            
-            # Save to file system if it's a custom template
-            if name.startswith('custom_'):
-                template_path = self._get_templates_directory() / f"{name}.j2"
-                with open(template_path, 'w', encoding='utf-8') as f:
-                    f.write(template_text)
-            
-            log.info(f"Registered template '{name}' (v{version}) with {len(variables)} variables")
-            
-        except jinja2.exceptions.TemplateSyntaxError as e:
-            raise ValueError(f"Invalid template syntax: {str(e)}")
+        if not template_text.strip():
+            raise ValueError("Template content cannot be empty.")
+        
+        template_object = self.env.from_string(template_text)
+        variables = self._extract_variables(template_text)
+        
+        self.template_cache.add_template(
+            name=name,
+            template_object=template_object,
+            template_text=template_text,
+            variables=variables
+        )
+        
+        self._template_instances[name] = {
+            'template': template_object,
+            'text': template_text,
+            'variables': variables,
+            'usage_count': 0,
+            'successful_uses': 0
+        }
     
     def render(self, template_name: str, **kwargs) -> str:
         """
@@ -371,239 +880,390 @@ class PromptTemplateManager:
         Raises:
             ValueError: If template is not found or rendering fails
         """
+        template = self.get_template(template_name)
         try:
-            template = self.get_template(template_name)
-            
-            # Check for missing variables
-            template_info = self.template_cache.get_template(template_name)
-            
-            if template_info:
-                # Check for missing variables
-                missing_vars = template_info['variables'] - set(kwargs.keys())
-                if missing_vars:
-                    # Use default values for optional variables (if provided)
-                    defaults = kwargs.get('defaults', {})
-                    for var in list(missing_vars):
-                        if var in defaults:
-                            kwargs[var] = defaults[var]
-                            missing_vars.remove(var)
-                
-                # Raise error if required variables are still missing
-                if missing_vars and not kwargs.get('ignore_missing', False):
-                    missing_list = ", ".join(missing_vars)
-                    raise ValueError(f"Missing required template variables: {missing_list}")
-            
-            # Render template
-            result = template.render(**kwargs)
-            
-            # Update statistics
-            if template_info:
-                self.template_cache.record_successful_use(template_name)
-                
-            return result
-            
-        except jinja2.exceptions.UndefinedError as e:
-            log.error(f"Template rendering error: {str(e)}")
-            raise ValueError(f"Missing template variable: {str(e)}")
-        except jinja2.exceptions.TemplateSyntaxError as e:
-            log.error(f"Template syntax error: {str(e)}")
-            raise ValueError(f"Template syntax error: {str(e)}")
+            rendered = template.render(**kwargs)
+            self._template_instances[template_name]['usage_count'] += 1
+            self._template_instances[template_name]['successful_uses'] += 1
+            return rendered
         except Exception as e:
-            log.error(f"Template rendering failed: {str(e)}")
-            raise ValueError(f"Failed to render template '{template_name}': {str(e)}")
+            log.error(f"Failed to render template '{template_name}': {e}")
+            raise ValueError(f"Failed to render template '{template_name}': {e}")
     
-    def from_file(self, file_path: Union[str, Path]) -> str:
+    def create_enhanced_prompt(
+        self, 
+        template_name: str,
+        system_template_name: str = "rag_system",
+        system_args: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> str:
         """
-        Load a template from a file and register it with the system.
+        Create an enhanced prompt by combining system template with content template.
         
         Args:
-            file_path: Path to the template file (j2, jinja, txt, or json)
+            template_name: Name of the content template
+            system_template_name: Name of the system template
+            system_args: Arguments for system template
+            **kwargs: Arguments for content template
             
         Returns:
-            str: Template name for later reference
-            
-        Raises:
-            FileNotFoundError: If the file doesn't exist
-            ValueError: If the file format is invalid
+            str: The combined prompt
         """
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Template file not found: {file_path}")
-            
-        try:
-            # Determine file type and load accordingly
-            if path.suffix.lower() in ['.json']:
-                with open(path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    
-                template_text = data.get('template')
-                template_name = data.get('name', path.stem)
-                version = data.get('version', "file-1.0")
-                
-                if not template_text:
-                    raise ValueError(f"JSON template file must contain a 'template' field")
-                    
-            else:  # Default to raw text file (.j2, .jinja, .txt, etc)
-                with open(path, 'r', encoding='utf-8') as f:
-                    template_text = f.read()
-                    
-                template_name = path.stem
-                version = "file-1.0"
-            
-            # Register the template with cache system
-            template_object = self.env.from_string(template_text)
-            self.template_cache.add_template(
-                name=template_name,
-                template_object=template_object,
-                template_text=template_text,
-                version=version
-            )
-            
-            log.info(f"Loaded template '{template_name}' from {path.name}")
-            return template_name
-            
-        except Exception as e:
-            log.error(f"Failed to load template from {path}: {e}")
-            raise ValueError(f"Failed to load template from {file_path}: {e}")
+        system_template = self.get_template(system_template_name)
+        content_template = self.get_template(template_name)
+        
+        system_context = system_template.render(**(system_args or {}))
+        content_context = content_template.render(**kwargs)
+        
+        return f"{system_context}\n\n{content_context}"
     
-    def save_to_file(self, template_name: str, file_path: Union[str, Path], format: str = 'json') -> None:
+    def get_template_info(self, template_name: str) -> Dict[str, Any]:
         """
-        Save a template to a file.
+        Get information about a template.
         
         Args:
-            template_name: Name of the template to save
-            file_path: Path where to save the template
-            format: Format to save as ('json', 'j2', or 'txt')
-            
-        Raises:
-            ValueError: If the template is not found or format is invalid
-        """
-        # Get template info from cache
-        template_info = self.template_cache.get_template(template_name)
-        if not template_info:
-            raise ValueError(f"Template '{template_name}' not found")
-        
-        path = Path(file_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        
-        try:
-            if format.lower() == 'json':
-                data = {
-                    'name': template_name,
-                    'version': template_info['version'],
-                    'template': template_info['text'],
-                    'variables': list(template_info['variables']),
-                    'stats': {
-                        'usage_count': template_info['usage_count'],
-                        'successful_uses': template_info['successful_uses']
-                    }
-                }
-                
-                with open(path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=2)
-                    
-            else:  # Default to raw text (j2 or txt)
-                with open(path, 'w', encoding='utf-8') as f:
-                    if format.lower() == 'j2':
-                        # For j2 format, just write the raw template
-                        f.write(template_info['text'])
-                    else:
-                        # For txt format, include some metadata as comments
-                        f.write(f"{{% # Template: {template_name} (v{template_info['version']}) %}}\n\n")
-                        f.write(template_info['text'])
-                
-            log.info(f"Saved template '{template_name}' to {path}")
-            
-        except Exception as e:
-            log.error(f"Failed to save template to {path}: {e}")
-            raise ValueError(f"Failed to save template: {e}")
-    
-    def add_examples(self, template_name: str, examples: List[Dict[str, Any]]) -> str:
-        """
-        Add few-shot learning examples to a template.
-        
-        Args:
-            template_name: Template to enhance
-            examples: List of example dictionaries with keys matching template variables
+            template_name: Name of the template
             
         Returns:
-            str: Name of the new template with examples
+            Dict with template information
             
         Raises:
-            ValueError: If template is not found or examples are invalid
-        """
-        # Get template from cache
-        template_info = self.template_cache.get_template(template_name)
-        if not template_info:
-            raise ValueError(f"Template '{template_name}' not found")
-            
-        template_text = template_info['text']
-            
-        if not examples:
-            return template_name
-            
-        # Format example section using Jinja2 syntax
-        example_section = """
-
-{# EXAMPLES SECTION #}
-{% if examples %}
-EXAMPLES:
-
-{% for example in examples %}
-Example {{ loop.index }}:
-
-Input:
-```
-{{ example.input }}
-```
-Output:
-```
-{{ example.output }}
-```
-{% endfor %}
-{% endif %}
-"""
-        
-        # Create new template with examples appended
-        new_template_text = template_text + example_section
-        new_template_name = f"{template_name}_with_examples"
-        
-        # Register the new template
-        self.register_template(new_template_name, new_template_text, f"{template_info['version']}+examples")
-        
-        return new_template_name
-    
-    def validate(self, template_name: str) -> Tuple[bool, Optional[str]]:
-        """
-        Validate the template structure and variables.
-        
-        Args:
-            template_name: Name of the template to validate
-        
-        Returns:
-            Tuple of (is_valid, error_message)
+            ValueError: If template is not found
         """
         if template_name not in self._template_instances:
-            return False, f"Template '{template_name}' not found"
+            raise ValueError(f"Template '{template_name}' not found.")
+        return self._template_instances[template_name]
             
-        template_info = self._template_instances[template_name]
-        template_text = template_info['text']
+    def list_templates(self) -> List[Dict[str, Any]]:
+        """
+        List all available templates with their information.
         
-        if not template_text:
-            return False, "Template is empty"
-            
-        # Check for balanced braces in variable placeholders
-        open_count = template_text.count('{{')
-        close_count = template_text.count('}}')
+        Returns:
+            List of dictionaries with template information
+        """
+        return [
+            {
+                'name': name,
+                'variables': info['variables'],
+                'usage_count': info['usage_count'],
+                'successful_uses': info['successful_uses']
+            }
+            for name, info in self._template_instances.items()
+        ]
+    
+    def get_template_categories(self) -> Dict[str, List[str]]:
+        """
+        Get all template categories with their templates.
         
-        if open_count != close_count:
-            return False, f"Unbalanced variable placeholders: {{ {open_count} opening vs {close_count} closing }}"
+        Returns:
+            Dictionary mapping categories to their template names
+        """
+        return {
+            "standard_rag": [
+                "rag_system", "query_reformulation", "context_presentation", 
+                "pandas_data_analysis", "vector_search"
+            ],
+            "pandas_specific": [
+                "pandas_query"
+            ],
+            "self_improvement": [
+                "awake_phase", "sleep_phase_enrichment", 
+                "ewc_parameter_importance", "hierarchical_version"
+            ],
+            "agent_operations": [
+                "expansion_agent", "merge_agent", "split_agent", "prune_agent"
+            ],
+            "vector_optimization": [
+                "pca_optimization", "hnsw_optimization"
+            ]
+        }
+    
+    def get_templates_by_category(self, category: str) -> List[Dict[str, Any]]:
+        """
+        Get all templates in a specific category.
+        
+        Args:
+            category: Category name
             
-        # Check template size
-        if len(template_text) > 10000:
-            return False, f"Template too large: {len(template_text)} chars (max 10000)"
+        Returns:
+            List of template info dictionaries
+        """
+        if category not in self._template_categories:
+            raise ValueError(f"Category '{category}' not found.")
+        return [
+            self.get_template_info(template_name)
+            for template_name in self._template_categories[category]
+        ]
+    
+    def get_template_usage_stats(self) -> Dict[str, Dict[str, int]]:
+        """
+        Get usage statistics for all templates.
+        
+        Returns:
+            Dict mapping template names to usage stats
+        """
+        return {
+            name: {
+                'usage_count': info['usage_count'],
+                'successful_uses': info['successful_uses']
+            }
+            for name, info in self._template_instances.items()
+        }
+    
+    def render_and_log(self, template_name: str, **kwargs) -> str:
+        """
+        Render a template and log the operation.
+        
+        Args:
+            template_name: Name of the template to render
+            **kwargs: Values to substitute in the template
             
-        return True, None
+        Returns:
+            str: The rendered template
+        """
+        rendered = self.render(template_name, **kwargs)
+        log.info(f"Rendered template '{template_name}' with arguments: {kwargs}")
+        return rendered
+    
+    def create_custom_template(self, template_text: str, 
+                              category: str = "custom") -> str:
+        """
+        Create a custom template with unique name based on content.
+        
+        Args:
+            template_text: Template content
+            category: Template category
+            
+        Returns:
+            str: Name of the created template
+        """
+        name = f"custom_{hash(template_text)}"
+        self.register_template(name, template_text, category=category)
+        return name
+    
+    def get_template_for_resource_level(self, template_type: str, 
+                                      resource_level: str = "standard") -> str:
+        """
+        Get appropriate template name based on resource constraints.
+        
+        Args:
+            template_type: Base template type (e.g., 'rag', 'query_reformulation')
+            resource_level: Resource level ('minimal', 'standard', 'full')
+            
+        Returns:
+            Name of the appropriate template
+        """
+        resource_templates = {
+            'minimal': {
+                'rag': 'lightweight_rag',
+                'query_reformulation': 'minimal_query_reformulation',
+                'context_assembly': 'efficient_context_assembly',
+            },
+            'standard': {
+                'rag': 'rag_system',
+                'query_reformulation': 'query_reformulation',
+                'context_assembly': 'context_presentation',
+                'data_analysis': 'pandas_data_analysis'
+            },
+            'full': {
+                'rag': 'rag_system',
+                'query_reformulation': 'query_reformulation',
+                'context_assembly': 'context_presentation',
+                'data_analysis': 'pandas_data_analysis'
+            }
+        }
+        
+        if resource_level not in resource_templates:
+            resource_level = 'standard'
+            
+        if template_type not in resource_templates[resource_level]:
+            if template_type in self._template_instances:
+                return template_type
+            return template_type
+            
+        return resource_templates[resource_level][template_type]
+    
+    def get_template_for_vector_operation(
+        self,
+        operation_type: str,
+        resource_level: str = "standard"
+    ) -> str:
+        """
+        Get appropriate template for vector operations based on operation type and resources.
+        
+        Args:
+            operation_type: Type of vector operation ('pca', 'batch', 'similarity')
+            resource_level: Resource level ('minimal', 'standard', 'full')
+            
+        Returns:
+            Name of the appropriate template
+        """
+        operation_templates = {
+            'minimal': {
+                'pca': 'quantized_vector',
+                'batch': 'quantized_vector',
+                'similarity': 'quantized_vector',
+            },
+            'standard': {
+                'pca': 'pca_vector_ops',
+                'batch': 'batch_vector_ops',
+                'similarity': 'batch_vector_ops',
+            },
+            'full': {
+                'pca': 'pca_vector_ops',
+                'batch': 'batch_vector_ops',
+                'similarity': 'batch_vector_ops',
+            }
+        }
+        
+        if resource_level not in operation_templates:
+            resource_level = 'standard'
+            
+        op_type = operation_type.lower()
+        if op_type not in operation_templates[resource_level]:
+            op_type = next(iter(operation_templates[resource_level].keys()))
+            
+        return operation_templates[resource_level][op_type]
+    
+    def reset_usage_stats(self) -> None:
+        """Reset usage statistics for all templates."""
+        for info in self._template_instances.values():
+            info['usage_count'] = 0
+            info['successful_uses'] = 0
+    
+    def create_recursive_improvement_cycle(self, 
+                                          cycle_number: int,
+                                          data_summary: str,
+                                          focus_areas: List[Dict[str, str]],
+                                          **kwargs) -> Dict[str, str]:
+        """
+        Create a complete set of prompts for a recursive improvement cycle.
+        
+        Args:
+            cycle_number: The current improvement cycle number
+            data_summary: Summary of data to be processed
+            focus_areas: List of focus areas with name and description
+            **kwargs: Additional parameters for templates
+            
+        Returns:
+            Dictionary of rendered templates for the improvement cycle
+        """
+        # Sleep phase for knowledge enrichment
+        sleep_phase = self.render('sleep_phase_enrichment', 
+                                  cycle_number=cycle_number,
+                                  data_summary=data_summary,
+                                  focus_areas=focus_areas,
+                                  **kwargs)
+        
+        # EWC parameter importance assessment
+        ewc_assessment = self.render('ewc_parameter_importance',
+                                    chunk_count=kwargs.get('chunk_count', 1000),
+                                    vector_dimensions=kwargs.get('vector_dimensions', 1024),
+                                    parameter_count=kwargs.get('parameter_count', 5000),
+                                    **kwargs)
+        
+        # Create hierarchical version checkpoint
+        version_checkpoint = self.render('hierarchical_version',
+                                        version_number=f"{cycle_number}.0",
+                                        parameter_count=kwargs.get('parameter_count', 5000),
+                                        kb_size=kwargs.get('kb_size', "1.2GB"),
+                                        cycle_number=cycle_number,
+                                        **kwargs)
+        
+        # Optimization templates
+        pca_optimization = self.render('pca_optimization',
+                                     vector_count=kwargs.get('vector_count', 10000),
+                                     current_dimensions=kwargs.get('current_dimensions', 1024),
+                                     **kwargs)
+        
+        hnsw_optimization = self.render('hnsw_optimization',
+                                      M_value=kwargs.get('M_value', 16),
+                                      ef_construction=kwargs.get('ef_construction', 200),
+                                      ef_search=kwargs.get('ef_search', 128),
+                                      vector_dimensions=kwargs.get('vector_dimensions', 1024),
+                                      **kwargs)
+        
+        return {
+            'sleep_phase': sleep_phase,
+            'ewc_assessment': ewc_assessment,
+            'version_checkpoint': version_checkpoint,
+            'pca_optimization': pca_optimization,
+            'hnsw_optimization': hnsw_optimization
+        }
+    
+    def get_agent_for_content_action(self, action_type: str, **kwargs) -> str:
+        """
+        Get the appropriate agent prompt for a content action.
+        
+        Args:
+            action_type: Type of action ('expand', 'merge', 'split', 'prune')
+            **kwargs: Parameters for the agent template
+            
+        Returns:
+            Rendered agent prompt
+        """
+        agent_map = {
+            'expand': 'expansion_agent',
+            'merge': 'merge_agent',
+            'split': 'split_agent',
+            'prune': 'prune_agent'
+        }
+        
+        template_name = agent_map.get(action_type.lower(), 'expansion_agent')
+        return self.render(template_name, **kwargs)
+
+
+# Helper functions for specific operations
+
+def get_prompt_template_manager() -> PromptTemplateManager:
+    """Get the singleton instance of PromptTemplateManager."""
+    return PromptTemplateManager()
+
+def render_template(template_name: str, **kwargs) -> str:
+    """
+    Utility function to render a template with the given arguments.
+    
+    Args:
+        template_name: Name of the template to render
+        **kwargs: Values to substitute in the template
+        
+    Returns:
+        The rendered template as a string
+    """
+    manager = get_prompt_template_manager()
+    return manager.render(template_name, **kwargs)
+
+def get_resource_appropriate_template(template_type: str, 
+                                    resource_level: str = "standard") -> str:
+    """
+    Get the appropriate template for the given resource level.
+    
+    Args:
+        template_type: The type of template needed
+        resource_level: Resource constraint level ('minimal', 'standard', 'full')
+        
+    Returns:
+        Name of the appropriate template
+    """
+    manager = get_prompt_template_manager()
+    return manager.get_template_for_resource_level(template_type, resource_level)
+
+def create_template_for_phase(phase: str) -> str:
+    """
+    Create appropriate template for the current operational phase.
+    
+    Args:
+        phase: Operational phase ('awake' or 'sleep')
+        
+    Returns:
+        Template name appropriate for the phase
+    """
+    if phase.lower() == 'awake':
+        return 'awake_phase'
+    elif phase.lower() == 'sleep':
+        return 'sleep_phase_enrichment'
+    else:
+        return 'rag_system'
 
 def query_pandas(df, question: str):
     """
@@ -636,16 +1296,13 @@ def format_dataframe_for_prompt(df, max_rows: int = 10, max_cols: int = 5) -> st
     if df is None or df.empty:
         return "No data available"
     
-    # Limit number of rows and columns
     display_df = df.iloc[:max_rows, :max_cols]
     
-    # Check if DataFrame was truncated and add indicators
     rows_truncated = df.shape[0] > max_rows
     cols_truncated = df.shape[1] > max_cols
     
     result = display_df.to_string()
     
-    # Add truncation indicators
     if rows_truncated or cols_truncated:
         notes = []
         if rows_truncated:
@@ -674,17 +1331,105 @@ def format_chunks_for_prompt(chunks: List[Dict], max_chars_per_chunk: int = 500)
     formatted_chunks = []
     
     for i, chunk in enumerate(chunks, 1):
-        # Extract necessary chunk information
         text = chunk.get('text', 'No text available')
         source = chunk.get('source', 'Unknown source')
         similarity = chunk.get('similarity', 0.0)
         
-        # Truncate chunk if necessary
         if len(text) > max_chars_per_chunk:
             text = text[:max_chars_per_chunk] + "..."
         
-        # Format chunk with metadata
         formatted_chunk = f"CHUNK {i} [source: {source}, relevance: {similarity:.2f}]:\n{text}\n"
         formatted_chunks.append(formatted_chunk)
     
     return "\n".join(formatted_chunks)
+
+def create_agent_prompt(agent_type: str, **kwargs) -> str:
+    """
+    Create a prompt for a specific agent type.
+    
+    Args:
+        agent_type: Type of agent ('expansion', 'merge', 'split', 'prune')
+        **kwargs: Agent-specific parameters
+        
+    Returns:
+        Rendered agent prompt
+    """
+    manager = get_prompt_template_manager()
+    
+    template_map = {
+        'expansion': 'expansion_agent',
+        'merge': 'merge_agent',
+        'split': 'split_agent',
+        'prune': 'prune_agent'
+    }
+    
+    template_name = template_map.get(agent_type.lower(), 'expansion_agent')
+    return manager.render(template_name, **kwargs)
+
+def create_vector_operation_prompt(operation_type: str, resource_level: str = "standard", **kwargs) -> str:
+    """
+    Create a prompt for vector operations with appropriate optimization level.
+    
+    Args:
+        operation_type: Type of vector operation ('pca', 'batch', 'similarity')
+        resource_level: Resource level ('minimal', 'standard', 'full')
+        **kwargs: Operation-specific parameters
+        
+    Returns:
+        Rendered vector operation prompt
+    """
+    manager = get_prompt_template_manager()
+    template_name = manager.get_template_for_vector_operation(operation_type, resource_level)
+    return manager.render(template_name, operation_type=operation_type, **kwargs)
+
+def create_recursive_improvement_cycle(cycle_number: int, **kwargs) -> Dict[str, str]:
+    """
+    Create templates for a complete recursive improvement cycle.
+    
+    Args:
+        cycle_number: The current improvement cycle number
+        **kwargs: Parameters for the templates
+        
+    Returns:
+        Dictionary of rendered templates
+    """
+    manager = get_prompt_template_manager()
+    return manager.create_recursive_improvement_cycle(cycle_number, **kwargs)
+
+def get_agent_for_action(action_type: str, **kwargs) -> str:
+    """
+    Get the appropriate agent prompt based on action type.
+    
+    Args:
+        action_type: Type of action ('expand', 'merge', 'split', 'prune')
+        **kwargs: Agent-specific parameters
+        
+    Returns:
+        Rendered agent prompt
+    """
+    manager = get_prompt_template_manager()
+    return manager.get_agent_for_content_action(action_type, **kwargs)
+
+def create_optimization_templates(vector_count: int, dimensions: int, **kwargs) -> Dict[str, str]:
+    """
+    Create optimization templates for vector operations.
+    
+    Args:
+        vector_count: Number of vectors in the database
+        dimensions: Current vector dimensions
+        **kwargs: Additional parameters
+        
+    Returns:
+        Dictionary with rendered optimization templates
+    """
+    manager = get_prompt_template_manager()
+    
+    return {
+        'pca': manager.render('pca_optimization', 
+                            vector_count=vector_count, 
+                            current_dimensions=dimensions,
+                            **kwargs),
+        'hnsw': manager.render('hnsw_optimization',
+                             vector_dimensions=dimensions,
+                             **kwargs)
+    }

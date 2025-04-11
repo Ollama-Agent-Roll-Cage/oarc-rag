@@ -1,20 +1,21 @@
 """
 AI client for interfacing with Ollama models using the official Ollama package.
 """
-import json
-import time
-import os
-from typing import Any, Dict, List, Optional, Union, Callable, TypeVar
 import asyncio
-from datetime import datetime, timedelta
+import json
+import os
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 from ollama import AsyncClient
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from oarc_rag.utils.log import log
+from oarc_rag.core.cache import cache_manager
+from oarc_rag.utils.config.config import Config
 from oarc_rag.utils.decorators.singleton import singleton
-from oarc_rag.utils.config import AI_CONFIG
-from oarc_rag.core.cache import cache_manager, ResponseCache
+from oarc_rag.utils.log import log
+from oarc_rag.utils.paths import Paths
 
 # Type variable for generic return type annotations
 T = TypeVar('T')
@@ -59,37 +60,53 @@ class OllamaClient:
         Raises:
             RuntimeError: If Ollama server is not available
         """
+        # Get configuration instance
+        config = Config()
+        
         # Use configuration values or defaults
-        self.base_url = base_url or AI_CONFIG.get('ollama_api_url', 'http://localhost:11434')
-        self.api_url = f"{self.base_url}/api"  # Add this line to create api_url attribute
-        self.default_model = default_model or AI_CONFIG.get('default_model', 'llama3.1:latest')
-        self.default_temperature = default_temperature if default_temperature is not None else AI_CONFIG.get('temperature', 0.7)
-        self.default_max_tokens = 4000  # Always use 4000 as default max_tokens
+        self.base_url = base_url or config.get('ai.ollama_api_url', 'http://localhost:11434')
+        self.api_url = f"{self.base_url}/api" 
+        self.default_model = default_model or config.get('ai.default_model', 'llama3.1:latest')
+        self.default_temperature = default_temperature if default_temperature is not None else config.get('ai.temperature', 0.7)
+        self.default_max_tokens = default_max_tokens or config.get('ai.max_tokens', 4000)
+        
+        # Get cache TTL from config if not provided
+        self.cache_ttl = cache_ttl or config.get('caching.response_ttl', 3600)
         
         # Create run directory structure
         self.run_id = str(int(time.time()))
-        base_output_dir = output_dir or os.path.join(os.getcwd(), "output")
-        self.output_dir = os.path.join(base_output_dir, self.run_id)
+        
+        # Use paths module to get output directory
+        if output_dir:
+            self.output_dir = Path(output_dir) / self.run_id
+        else:
+            self.output_dir = Paths.get_output_directory() / self.run_id
         
         # Create subdirectories for different data types
-        self.collected_dir = os.path.join(self.output_dir, "collected")
-        self.extracted_dir = os.path.join(self.output_dir, "extracted")
+        self.collected_dir = self.output_dir / "collected"
+        self.extracted_dir = self.output_dir / "extracted"
         
         # Create the directory structure
-        os.makedirs(self.output_dir, exist_ok=True)
-        os.makedirs(self.collected_dir, exist_ok=True)
-        os.makedirs(self.extracted_dir, exist_ok=True)
+        Paths.ensure_directory(self.output_dir)
+        Paths.ensure_directory(self.collected_dir)
+        Paths.ensure_directory(self.extracted_dir)
         
         log.info(f"Created output directory structure in: {self.output_dir}")
         
         # Get response cache from cache manager
         self.cache_responses = cache_responses
+        if cache_responses:
+            enabled_in_config = config.get('caching.enabled', True)
+            if not enabled_in_config:
+                self.cache_responses = False
+                log.info("Response caching disabled by configuration")
+        
         self.response_cache = cache_manager.response_cache
         
         # Initialize Ollama client
         self.client = AsyncClient(host=self.base_url)
-        self.last_request = {}  # Add this to store last request data for debugging
-        self.last_response = {}  # Add this to store last response data for debugging
+        self.last_request = {}  # Store last request data for debugging
+        self.last_response = {}  # Store last response data for debugging
         
         # Add API call monitoring
         self.api_calls = {
@@ -107,8 +124,8 @@ class OllamaClient:
         # Adaptive response handling
         self.operational_mode = "awake"  # Default to real-time mode
         self.response_timeouts = {
-            "awake": 30,  # 30 seconds in awake mode
-            "sleep": 180  # 3 minutes in sleep mode
+            "awake": config.get('operational_mode.awake_timeout', 30),  # Default: 30 seconds in awake mode
+            "sleep": config.get('operational_mode.sleep_cycle_duration', 180)  # Default: 3 minutes in sleep mode
         }
         
     def set_operational_mode(self, mode: str) -> None:
@@ -130,42 +147,6 @@ class OllamaClient:
     def _get_timeout(self) -> int:
         """Get appropriate timeout based on operational mode."""
         return self.response_timeouts.get(self.operational_mode, 30)
-    
-    def _cache_key(self, **kwargs) -> str:
-        """
-        Generate a cache key from request parameters.
-        
-        Args:
-            **kwargs: Request parameters
-            
-        Returns:
-            Cache key string
-        """
-        # Remove parameters that shouldn't affect caching
-        if "stream" in kwargs:
-            del kwargs["stream"]
-        if "callback" in kwargs:
-            del kwargs["callback"]
-            
-        # Sort dictionary to ensure consistent ordering
-        sorted_items = sorted(kwargs.items())
-        
-        # Convert to JSON string for hashing
-        return json.dumps(sorted_items, sort_keys=True)
-    
-    def _clean_expired_cache(self) -> None:
-        """Remove expired items from cache."""
-        now = datetime.now()
-        expired_keys = [k for k, v in self._cache_expiry.items() if now > v]
-        
-        for key in expired_keys:
-            if key in self._response_cache:
-                del self._response_cache[key]
-            if key in self._cache_expiry:
-                del self._cache_expiry[key]
-                
-        if expired_keys:
-            log.debug(f"Cleaned {len(expired_keys)} expired cache entries")
     
     def invalidate_cache(self) -> None:
         """Clear all cached responses."""
@@ -642,5 +623,5 @@ class OllamaClient:
             "cache_hit_rate": cache_hit_rate,
             "error_rate": self.api_calls["errors"] / max(1, total_calls),
             "avg_tokens_per_call": self.api_calls["total_tokens"] / max(1, total_calls),
-            "cache_entries": len(self._response_cache)
+            "cache_entries": self.response_cache.get_size() if hasattr(self, 'response_cache') else 0
         }
