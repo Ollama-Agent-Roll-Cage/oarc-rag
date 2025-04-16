@@ -19,8 +19,10 @@ The Cognitive Energy Model tracks the system's operational capacity through two 
 1. **Energy**: Represents the system's available computational resources, which are depleted through operations and recovered during sleep cycles.
 2. **Entropy**: Represents system disorder that increases through operations and is reduced during sleep cycles.
 
+The following algorithm demonstrates how the Cognitive Energy Model manages system resources and state transitions. This model serves as the foundation for the system's self-regulation capabilities, allowing it to adapt its behavior based on available computational resources. By tracking energy depletion from various operations and the accumulation of entropy (system disorder), the model enables graceful degradation under load and proactive resource management, similar to how biological systems manage their energy budgets.
+
 ```
-Algorithm: CognitiveEnergyModel
+CognitiveEnergyModel
 
 Initialize:
   current_energy ← max_energy
@@ -38,14 +40,12 @@ RecordOperation(operation_type, count):
 UpdateSystemState():
   energy_percent ← current_energy / max_energy × 100
   
-  // Determine state from energy level
   if energy_percent ≥ 80: new_state ← OPTIMAL
   else if energy_percent ≥ 60: new_state ← FATIGUED
   else if energy_percent ≥ 30: new_state ← OVERTIRED
   else if energy_percent ≥ 10: new_state ← CRITICAL
   else: new_state ← PROTECTIVE
   
-  // Adjust for high entropy
   if entropy_percent > 90 and new_state ≠ PROTECTIVE:
     Degrade new_state by one level
   
@@ -53,7 +53,6 @@ UpdateSystemState():
   return new_state
 
 ShouldInitiateSleep():
-  // Evaluate energy, entropy, and inactivity to decide
   if system_state ∈ {PROTECTIVE, CRITICAL}: return true
   if system_state = OVERTIRED and entropy_percent > 70: return true
   if time_since_activity > threshold and energy_low: return true
@@ -70,14 +69,16 @@ The system transitions between operational states based on energy and entropy le
 4. **CRITICAL**: Emergency mode, only essential operations (10-30% energy)
 5. **PROTECTIVE**: Forced recovery, minimal operations only (<10% energy)
 
+The system employs a state-based optimization mechanism that adjusts resource usage based on current energy levels. This function maps system states to optimization levels, allowing components to adapt their behavior accordingly. Higher optimization levels correspond to more aggressive resource conservation strategies, ensuring the system can maintain essential functionality even when energy is low, as specified in the main architecture document's energy management guidelines.
+
 ```
 GetOptimizationLevel():
   Match system_state:
-    OPTIMAL:    return 0  // No optimizations
-    FATIGUED:   return 1  // Light optimizations
-    OVERTIRED:  return 2  // Moderate optimizations
-    CRITICAL:   return 3  // Heavy optimizations
-    PROTECTIVE: return 4  // Maximum optimizations
+    OPTIMAL:    return 0
+    FATIGUED:   return 1
+    OVERTIRED:  return 2
+    CRITICAL:   return 3
+    PROTECTIVE: return 4
 ```
 
 ```mermaid
@@ -119,9 +120,10 @@ The system implements multiple sleep stages inspired by human sleep cycles:
 3. **REM**: Creative connections and knowledge synthesis
 4. **RECOVERY**: Emergency recovery mode for overtired systems
 
+The sleep scheduling algorithm determines the appropriate sleep stage and duration based on the current system state. This biomimetic approach to system maintenance mirrors how human sleep cycles serve different cognitive functions. The sleep scheduler selects increasingly deeper and longer recovery periods as system energy decreases, with RECOVERY being the most intensive stage reserved for critical conditions. This mechanism connects directly to the maintenance strategies outlined in the main specification, providing scheduled periods for optimization tasks that would otherwise impact performance during normal operation.
+
 ```
 ScheduleSleep():
-  // Choose appropriate sleep stage based on current state
   if system_state = PROTECTIVE:
     stage ← RECOVERY
     duration ← 30.0
@@ -130,7 +132,7 @@ ScheduleSleep():
     duration ← 20.0
   else if system_state = OVERTIRED:
     if entropy > high_threshold:
-      stage ← REM  // High entropy needs REM
+      stage ← REM
       duration ← 15.0
     else:
       stage ← SLOW_WAVE
@@ -145,7 +147,6 @@ ExecuteSleepCycle(stage, duration):
   current_sleep_stage ← stage
   start_time ← current_time()
   
-  // Execute stage-specific operations
   if stage = NAPPING: PerformNapping(duration)
   else if stage = SLOW_WAVE: PerformSlowWaveSleep(duration)
   else if stage = REM: PerformREMSleep(duration)
@@ -163,11 +164,12 @@ The system operates in several distinct phases during the awake state, each with
 
 During the Alert phase, the system operates at peak performance and responsiveness:
 
+The Alert Phase represents the optimal operational mode when energy levels are high. This algorithm configures the system for maximum accuracy and proactive processing. In this phase, the system prioritizes result quality over computational efficiency, enabling features like speculative processing and advanced retrieval techniques. This phase aligns with the performance optimization strategies in the main specification, representing the baseline state where all systems operate at full capacity without constraints.
+
 ```
 OperateInAlertPhase():
   if system_state ≠ OPTIMAL: return false
   
-  // Set optimization to minimum
   SetOptimizationLevel(0)
   EnableProactiveOperations(true)
   SetRetrievalPriority("accuracy")
@@ -180,11 +182,12 @@ OperateInAlertPhase():
 
 The Focused phase represents directed attention on specific tasks with moderate energy:
 
+This algorithm configures the system for balanced operation when energy levels are good but not optimal. The Focused Phase represents a slight degradation from peak performance, implementing light optimizations to conserve resources while maintaining strong functionality. This state corresponds to the multi-level optimization approach described in the main specification, where the system can dynamically adjust its resource consumption based on operational conditions, prioritizing current tasks while beginning to limit background activities.
+
 ```
 OperateInFocusedPhase():
   if system_state ∉ {OPTIMAL, FATIGUED}: return false
   
-  // Apply light optimization
   SetOptimizationLevel(1)
   PrioritizeCurrentTasks()
   SetRetrievalPriority("balanced")
@@ -196,14 +199,15 @@ OperateInFocusedPhase():
 
 When energy is limited, the system enters Conservation phase to maintain essential functions:
 
+The Conservation Phase algorithm implements significant energy-saving measures during periods of limited resources. This mode increases caching effectiveness, disables non-essential background tasks, and shifts retrieval strategies toward efficiency over comprehensiveness. It proactively schedules sleep cycles when possible to recover energy. This phase directly implements the graceful degradation principles described in the main specification, allowing the system to continue functioning effectively even with significantly reduced resources by focusing only on high-priority operations.
+
 ```
 OperateInConservationPhase():
   if system_state ∉ {OVERTIRED, CRITICAL}: return false
   
-  // Apply significant optimization
   SetOptimizationLevel(3)
   DisableNonEssentialTasks()
-  IncreaseEffectiveCacheTTL(3.0)  // 3x normal TTL
+  IncreaseEffectiveCacheTTL(3.0)
   SetRetrievalPriority("efficiency")
   
   if CanScheduleProactiveSleep():
@@ -216,11 +220,12 @@ OperateInConservationPhase():
 
 The Emergency phase represents operations under critical energy conditions:
 
+The Emergency Phase activates when energy levels reach critically low thresholds. This emergency protocol maximizes resource conservation by enforcing the most aggressive optimization settings, rejecting all non-critical requests, and providing minimal responses to essential operations. It triggers immediate recovery cycles if not already in a sleep state. This phase implements the system protection mechanisms described in the main specification, preventing complete system failure by radically reducing functionality to preserve core operations until energy can be restored.
+
 ```
 OperateInEmergencyPhase():
   if system_state ≠ PROTECTIVE: return false
   
-  // Maximum optimization to preserve resources
   SetOptimizationLevel(4)
   RejectNonCriticalRequests()
   SetMinimalResponseMode()
@@ -239,6 +244,8 @@ Each sleep phase serves a specific purpose in maintaining system health and opti
 
 The NAPPING phase provides light recovery with minimal system maintenance:
 
+The NAPPING algorithm implements a light recovery mode designed for quick energy restoration with minimal interruption to system availability. It begins energy recovery immediately while gradually performing light maintenance tasks after the first minute. This phase regularly checks if it should be interrupted by urgent system needs. As described in the main specification's maintenance strategies, NAPPING represents the lowest-intensity maintenance cycle suitable for regular use during normal operation. The light maintenance tasks align with the "routine maintenance" operations outlined in the specification, focusing on cache refreshing and data validation.
+
 ```
 PerformNapping(duration):
   minutes_elapsed ← 0
@@ -247,15 +254,12 @@ PerformNapping(duration):
   while minutes_elapsed < duration:
     if CheckInterruptSleep(): break
     
-    // Recover energy
     energy_recovery ← recovery_rates[NAPPING] × interval
     current_energy ← min(max_energy, current_energy + energy_recovery)
     
-    // Light entropy reduction
     entropy_reduction ← entropy_reduction_rates[NAPPING] × interval
     current_entropy ← max(0, current_entropy - entropy_reduction)
     
-    // Perform light maintenance after first minute
     if minutes_elapsed ≥ 1.0:
       PerformLightMaintenance(0.1)
     
@@ -273,25 +277,26 @@ PerformLightMaintenance(intensity):
 
 SLOW_WAVE sleep focuses on deep memory consolidation and system optimization:
 
+The SLOW_WAVE sleep algorithm implements deeper optimization and maintenance operations that parallel the slow-wave sleep phase in human cognition. It sequentially executes resource-intensive optimization tasks like PCA dimensionality reduction, vector cleanup, index optimization, and chunk clustering. Each operation helps consolidate and optimize the knowledge base, improving future retrieval efficiency. This phase directly implements the database optimization and index maintenance operations outlined in the main specification, and represents a critical component of the system's self-optimization capabilities, allowing it to maintain performance as the knowledge base grows.
+
 ```
 PerformSlowWaveSleep(duration):
   start_time ← current_time()
-  target_end_time ← start_time + (duration × 60)
+  target_end_time ← start_time + duration × 60
   
   operations ← [
-    ("pca_optimization", PerformPCAOptimization),
-    ("vector_cleanup", PerformVectorCleanup),
-    ("index_optimization", OptimizeIndices),
-    ("chunk_clustering", ClusterChunks)
+    (pca_optimization, OptimizePCA),
+    (vector_cleanup, CleanupVectors),
+    (index_optimization, OptimizeIndices),
+    (chunk_clustering, ClusterChunks)
   ]
   
-  // Perform operations until time runs out
-  for each (op_name, op_func) in operations:
-    if current_time() ≥ target_end_time: break
+  for each operation in operations:
+    if current_time() ≥ target_end_time: 
+      exit loop
     
-    op_func()
+    execute operation
     
-    // Update energy and entropy
     time_spent ← (current_time() - last_update_time) / 60
     RecoverEnergy(SLOW_WAVE, time_spent)
     ReduceEntropy(SLOW_WAVE, time_spent)
@@ -301,28 +306,23 @@ PerformSlowWaveSleep(duration):
 
 The REM sleep phase focuses on creative connections and knowledge synthesis:
 
+The REM sleep algorithm implements sophisticated knowledge synthesis operations inspired by how human REM sleep facilitates creative connections and memory consolidation. During this phase, the system identifies concept clusters, discovers semantically similar but disconnected chunks, creates new connections between related content, and generates higher-level abstractions. This phase implements the knowledge graph enhancement strategies described in the main specification, playing a critical role in developing the system's conceptual understanding over time by forming connections that aren't immediately apparent through direct similarity. These operations enhance the system's ability to retrieve contextually relevant information beyond simple vector similarity.
+
 ```
 PerformREMSleep(duration):
   start_time ← current_time()
-  target_end_time ← start_time + (duration × 60)
+  target_end_time ← start_time + duration × 60
   
-  // Identify concept clusters
   concept_clusters ← IdentifyConceptClusters()
   
-  // Process each cluster
   for each cluster in concept_clusters:
-    if current_time() ≥ target_end_time: break
+    if current_time() ≥ target_end_time:
+      exit loop
     
-    // Find semantically similar but disconnected chunks
     distant_connections ← FindDistantConnections(cluster)
-    
-    // Create connections between related chunks
     CreateConceptConnections(cluster, distant_connections)
-    
-    // Generate higher-level abstractions
     GenerateAbstractions(cluster)
     
-    // Recover energy periodically
     RecoverEnergy(REM, time_since_last_update)
     ReduceEntropy(REM, time_since_last_update)
 ```
@@ -331,19 +331,15 @@ PerformREMSleep(duration):
 
 The Recovery phase is an emergency restorative sleep mode:
 
+The RECOVERY sleep algorithm implements an emergency restoration protocol when the system reaches critically low energy levels. It executes in three distinct phases: rapid energy recovery (focusing on restoring computational resources), critical system repairs (fixing any identified issues or inconsistencies), and entropy reduction (restoring system order). This emergency protocol directly implements the system resilience strategies outlined in the main specification, providing a mechanism for the system to recover from periods of extreme load or resource depletion without manual intervention. This capability is essential for continuous operation in production environments.
+
 ```
 PerformRecoverySleep(duration):
-  // Record initial state
   initial_energy ← current_energy
   initial_entropy ← current_entropy
   
-  // Phase 1: Critical Energy Recovery (40% of time)
   PerformRapidEnergyRecovery(duration × 0.4)
-  
-  // Phase 2: Critical System Repairs (30% of time)
-  critical_repairs ← PerformCriticalRepairs(duration × 0.3)
-  
-  // Phase 3: Entropy Reduction (30% of time)
+  PerformCriticalRepairs(duration × 0.3)
   PerformEntropyReduction(duration × 0.3)
 ```
 
@@ -365,24 +361,26 @@ The Experience Graph creates a multi-level representation of knowledge:
 4. **Memory Abstractions**: Higher-order nodes representing consolidated knowledge
 5. **Meme Structures**: Self-reinforcing patterns that persist across multiple contexts
 
-```
-Class GraphNode:
-  id          // Unique identifier
-  type        // "chunk", "cluster", "abstraction", "meme"
-  text        // Text content
-  embedding   // Numerical vector representation
-  metadata    // Additional properties
-  created_at  // Creation timestamp
-  source_ids  // IDs of source nodes
-  activation  // Counter for activation frequency
+The GraphNode and GraphEdge classes define the core data structures for the Experience Graph component. These structures implement the associative memory model described in the main specification, creating a multi-layered representation that ranges from raw text chunks to higher-level conceptual abstractions. This hierarchical approach emulates how human memory consolidates specific experiences into generalized patterns and concepts. The Experience Graph complements the vector database described in the main specification by adding explicit relationship modeling and hierarchical abstraction capabilities.
 
-Class GraphEdge:
-  id          // Unique identifier
-  source_id   // Origin node ID
-  target_id   // Destination node ID
-  type        // "similarity", "temporal", "causal", "hierarchical"
-  weight      // Connection strength (0.0-1.0)
-  metadata    // Additional properties
+```
+GraphNode:
+  id
+  type
+  text
+  embedding
+  metadata
+  created_at
+  source_ids
+  activation
+
+GraphEdge:
+  id
+  source_id
+  target_id
+  type
+  weight
+  metadata
 ```
 
 #### 5.1.2 Experience Graph Operations
@@ -408,21 +406,23 @@ The Memory Graph is implemented as a directed property graph with:
 3. **Properties**: Key-value attributes attached to entities and relationships
 4. **Types**: Ontological classifications for entities and relationships
 
-```
-Class EntityNode:
-  id          // Unique identifier
-  type        // Entity type (e.g., "Person", "Concept")
-  name        // Canonical name
-  properties  // Property attributes
-  created_at  // Creation timestamp
+The EntityNode and RelationshipEdge classes define the core data structures for the Memory Graph, implementing the structured knowledge representation described in the main specification. Unlike the associative Experience Graph, the Memory Graph provides explicit semantic modeling through typed entities and relationships, capturing factual knowledge rather than pattern-based associations. This approach is aligned with the knowledge representation strategies in the main specification, enabling precise logical querying and inference capabilities that complement vector similarity search.
 
-Class RelationshipEdge:
-  id          // Unique identifier
-  source_id   // Source entity ID
-  target_id   // Target entity ID
-  type        // Relationship type (e.g., "is_a", "part_of")
-  weight      // Confidence/strength (0.0-1.0)
-  properties  // Additional attributes
+```
+EntityNode:
+  id
+  type
+  name
+  properties
+  created_at
+
+RelationshipEdge:
+  id
+  source_id
+  target_id
+  type
+  weight
+  properties
 ```
 
 #### 5.2.2 Memory Graph Operations
@@ -448,62 +448,60 @@ The Memory Graph supports several core operations:
    - Property inheritance through hierarchies
    - Consistency validation
 
+These Memory Graph operations implement the structured knowledge management capabilities described in the main specification. The AddEntity algorithm creates new concept nodes in the knowledge graph, while AddRelationship establishes typed semantic connections between entities. The Query algorithm enables traversal-based knowledge retrieval that follows explicit relationship paths rather than vector similarity. These functions provide a complementary knowledge access mechanism to the vector similarity approaches described in the main specification, enabling more precise factual retrieval and logical inference capabilities.
+
 ```
 AddEntity(type, name, properties):
   entity_id ← GenerateEntityID(type, name)
   
-  if entity_id in entities:
-    return {success: false, message: "Entity already exists"}
+  if entity_id exists in entities:
+    return failure with message "Entity already exists"
   
-  // Create entity node
-  entity ← new EntityNode with {id, type, name, properties}
+  entity ← create new entity with {id, type, name, properties}
+  store entity in entities collection
+  add entity_id to type index
   
-  // Store entity and update indices
-  entities[entity_id] ← entity
-  entity_type_index[type] ← entity_id
-  
-  return {success: true, entity_id}
+  return success with entity_id
+```
 
+```
 AddRelationship(source_id, relation_type, target_id, weight):
-  // Validate inputs
-  if source_id not in entities or target_id not in entities:
-    return {success: false, message: "Entity not found"}
+  if source_id or target_id not in entities:
+    return failure with message "Entity not found"
   
-  // Create relationship edge
   relationship_id ← GenerateRelationshipID(source_id, relation_type, target_id)
-  relationship ← new RelationshipEdge with {source_id, target_id, type, weight}
+  relationship ← create relationship with {source_id, target_id, type, weight}
   
-  // Store relationship and update indices
-  relationships[relationship_id] ← relationship
+  store relationship in relationships collection
+  update relationship indices
   
-  // Add inverse relationship if defined
-  if relation_types[relation_type].inverse:
-    inverse_type ← relation_types[relation_type].inverse
+  if relation_type has inverse relation:
+    inverse_type ← get inverse relation type
     AddRelationship(target_id, inverse_type, source_id, weight)
   
-  return {success: true, relationship_id}
+  return success with relationship_id
+```
 
+```
 Query(start_entity, relation_path, max_depth):
   if start_entity not in entities:
-    return []
+    return empty results
   
-  results ← []
-  visited ← {start_entity}
-  queue ← [{entity: start_entity, depth: 0, path: []}]
+  results ← empty list
+  visited ← set containing start_entity
+  queue ← list containing {entity: start_entity, depth: 0, path: empty list}
   
-  while queue is not empty and queue[0].depth < max_depth:
-    current ← queue.dequeue()
+  while queue not empty and first item depth < max_depth:
+    current ← remove first item from queue
     entity_id ← current.entity
     
-    // Get outgoing relationships
-    for each relation_type, targets in outgoing_edges[entity_id]:
+    for each outgoing relation_type and targets from entity_id:
       if relation_path is null or relation_type in relation_path:
         for each target_id in targets:
           if target_id not in visited:
-            // Process target and add to results
-            visited.add(target_id)
-            results.append({entity_id: target_id, depth: current.depth + 1})
-            queue.enqueue({entity: target_id, depth: current.depth + 1})
+            add target_id to visited
+            add {entity_id: target_id, depth: current.depth + 1} to results
+            add {entity: target_id, depth: current.depth + 1} to queue
   
   return results
 ```
@@ -519,20 +517,18 @@ The Memory Graph is populated through several mechanisms:
 
 During sleep cycles, the Memory Graph undergoes maintenance:
 
+The MemoryGraphMaintenance algorithm implements critical knowledge graph optimization and consistency management operations that occur during sleep cycles. This maintenance process aligns with the database optimization strategies in the main specification, focusing specifically on the structured knowledge represented in the Memory Graph. It performs ontological consistency checking, computes transitive relationships to enhance querying efficiency, prunes low-confidence data to maintain quality, and merges duplicate entities to reduce redundancy. These operations ensure the Memory Graph remains accurate and efficient as it grows, supporting the system's overall knowledge representation capabilities.
+
 ```
 MemoryGraphMaintenance():
-  // Check for consistency
   inconsistencies ← CheckOntologicalConsistency()
   for each inconsistency: ResolveInconsistency(inconsistency)
   
-  // Compute transitive relationships
   for each transitive_relation: ComputeTransitiveClosure(transitive_relation)
   
-  // Prune low-confidence relationships
   low_confidence ← GetLowConfidenceRelationships(threshold)
   for each relationship in low_confidence: RemoveRelationship(relationship)
   
-  // Merge duplicate entities
   potential_duplicates ← FindPotentialDuplicates()
   for each duplicate_group: MergeEntities(duplicate_group)
 ```
@@ -616,80 +612,65 @@ graph TB
 
 The CRAG system provides integrated retrieval across both memory structures:
 
+The DualGraphRetrieval algorithm implements the integrated querying system that combines vector-based similarity search with structured knowledge retrieval. This multi-phase approach enhances the core retrieval capabilities described in the main specification by adding structured knowledge context to similarity-based results. The algorithm first retrieves vector-similar content, then extracts entities to query the Memory Graph for related structured knowledge, and finally combines and ranks all results. This integrated approach provides more comprehensive, contextually-relevant responses compared to pure vector similarity methods, implementing the knowledge enhancement strategy outlined in the main specification.
+
 ```
 DualGraphRetrieval(query, max_results):
-  // Get embeddings for the query
   query_embedding ← EmbedQuery(query)
   
-  // Phase 1: Vector similarity from experience graph
-  experience_results ← experience_graph.RetrieveRelevantMemories(
-    query_embedding, max_results)
+  experience_results ← experience_graph.RetrieveRelevantMemories(query_embedding, max_results)
   
-  // Phase 2: Extract entities and query memory graph
   entities ← ExtractEntities(query)
-  memory_results ← []
+  memory_results ← empty list
   
   for each entity in entities:
     entity_nodes ← memory_graph.LookupEntity(entity)
     for each entity_node in entity_nodes:
       relationships ← memory_graph.Query(entity_node, null, 2)
       for each relationship in relationships:
-        memory_results.append({
-          text: FormatRelationshipAsText(relationship),
-          confidence: relationship.weight
-        })
+        add {text: format relationship as text, confidence: relationship.weight} to memory_results
   
-  // Phase 3: Combine and rank results
-  combined_results ← []
+  combined_results ← empty list
+  
   for each result in experience_results:
-    combined_results.append({
-      text: result.text,
-      score: result.similarity,
-      source: "experience_graph"
-    })
+    add {text: result.text, score: result.similarity, source: "experience_graph"} to combined_results
   
   for each result in memory_results:
-    combined_results.append({
-      text: result.text,
-      score: CalculateScore(result, query_embedding),
-      source: "memory_graph"
-    })
+    add {text: result.text, score: CalculateScore(result, query_embedding), source: "memory_graph"} to combined_results
   
-  Sort combined_results by score (descending)
-  return First max_results items
+  sort combined_results by score in descending order
+  return first max_results items from combined_results
 ```
 
 #### 5.3.2 Knowledge Bridge Mechanism
 
 The system implements a Knowledge Bridge to transfer information between the two graph structures:
 
+The Knowledge Bridge algorithms facilitate bidirectional information flow between the Experience Graph and Memory Graph components. The UpdateMemoryFromExperience function extracts structured knowledge from the abstract patterns identified in the Experience Graph, converting associative patterns into explicit semantic relationships in the Memory Graph. Conversely, the EnrichExperienceFromMemory function enhances vector-based content with structured knowledge context. These mechanisms implement the knowledge integration strategies outlined in the main specification, creating a synergistic relationship between the two complementary knowledge representation approaches. This integration enhances both retrieval precision and context awareness beyond what either system could achieve independently.
+
 ```
 UpdateMemoryFromExperience():
-  // Extract structured knowledge from experience graph abstractions
   unprocessed_abstractions ← GetUnprocessedAbstractions()
   
   for each abstraction in unprocessed_abstractions:
     extraction_result ← ExtractStructuredKnowledge(abstraction.text)
     
-    if extraction_result.success:
-      // Add entities to memory graph
+    if extraction_result is successful:
       for each entity in extraction_result.entities:
         memory_graph.AddEntity(entity.type, entity.name, entity.properties)
       
-      // Add relationships to memory graph
       for each relationship in extraction_result.relationships:
-        memory_graph.AddRelationship(
-          relationship.source, relationship.type,
-          relationship.target, relationship.confidence)
+        memory_graph.AddRelationship(relationship.source, relationship.type, relationship.target, relationship.confidence)
       
-      MarkAbstractionProcessed(abstraction.id)
+      mark abstraction as processed
+```
 
+```
 EnrichExperienceFromMemory():
-  // Enrich experience graph with memory graph knowledge
   recent_nodes ← GetRecentlyActivatedNodes()
   
   for each node in recent_nodes:
-    if node.type = "chunk":
+    if node is of type "chunk":
       entities ← ExtractEntities(node.text)
       
       for each entity in entities:
@@ -702,15 +683,9 @@ EnrichExperienceFromMemory():
             if relationships is not empty:
               enrichment_text ← FormatRelationshipsAsText(relationships)
               
-              // Add enrichment to experience graph
-              enrichment_id ← experience_graph.AddExperience(
-                enrichment_text, 
-                EmbedText(enrichment_text),
-                {type: "enrichment", entity: entity})
+              enrichment_id ← experience_graph.AddExperience(enrichment_text, EmbedText(enrichment_text), {type: "enrichment", entity: entity})
               
-              // Link enrichment to original chunk
-              experience_graph.CreateEdge(
-                node.id, enrichment_id, "enrichment", 0.9)
+              experience_graph.CreateEdge(node.id, enrichment_id, "enrichment", 0.9)
 ```
 
 ### 5.4 Memory Graph vs Experience Graph Comparison
@@ -736,43 +711,40 @@ The system is designed for continuous server operation:
 - Sleep cycles are scheduled during predicted low-activity periods
 - Request handling continues during light sleep stages
 
+The CognitiveServer and HandleRequest algorithms implement the server adaptation layer that enables the CRAG system to operate continuously in production environments. These components integrate the cognitive framework with traditional server request handling, implementing the resilience and continuous operation strategies described in the main specification. The server manages incoming requests based on the current cognitive state, prioritizing critical operations and potentially rejecting non-essential requests during protective states. This approach ensures that the system can maintain core functionality even under extreme load conditions, implementing the graceful degradation principle outlined in the main specification.
+
 ```
 CognitiveServer(rag_engine, cognitive_model):
-  // Initialize components
-  if rag_engine is null: rag_engine ← new RAGEngine()
-  if cognitive_model is null: cognitive_model ← new CognitiveEnergyModel()
+  if rag_engine is null: 
+    rag_engine ← create new RAGEngine
   
-  // Start background monitoring
-  cognitive_model.StartMonitoring()
+  if cognitive_model is null: 
+    cognitive_model ← create new CognitiveEnergyModel
   
-  // Initialize request management
-  request_queue ← []
+  start cognitive_model monitoring
+  
+  request_queue ← empty list
   stats ← {total_requests: 0, rejected_requests: 0}
+```
 
+```
 HandleRequest(request_data, priority):
-  // Create request object
   request_id ← GenerateUUID()
-  request ← {id: request_id, data: request_data, priority, timestamp: now()}
+  request ← {id: request_id, data: request_data, priority, timestamp: current_time}
   
-  // Check system state
   system_state ← cognitive_model.system_state
   
-  // Handle protective mode - reject non-critical requests
-  if system_state = PROTECTIVE and priority ≠ "critical":
-    stats.rejected_requests += 1
+  if system_state is PROTECTIVE and priority is not "critical":
+    increment stats.rejected_requests
     return {status: "rejected", reason: "system_in_protective_mode"}
   
-  // Track request
-  stats.total_requests += 1
+  increment stats.total_requests
   
-  // Add to queue with priority
-  AddToQueue(request_queue, request, priority)
+  add request to queue with priority
   
-  // Interrupt sleep for critical requests
-  if priority = "critical" and cognitive_model.InSleepMode():
-    cognitive_model.InterruptSleep()
+  if priority is "critical" and cognitive_model is in sleep mode:
+    interrupt cognitive_model sleep
   
-  // Process request
   result ← ProcessRequest(request)
   cognitive_model.RecordOperation("query", 1)
   
@@ -799,22 +771,17 @@ The RAG Engine interfaces with the CRAG system:
 - Non-urgent operation scheduling during appropriate cycles
 - Knowledge-enhanced retrieval using both graph systems
 
+The EnhancedRetrievalWithCRAG algorithm implements the integration between the core RAG engine and the cognitive system. This function enhances the basic vector retrieval capabilities described in the main specification by adding energy-aware parameter adjustment and dual-graph knowledge augmentation. The algorithm tracks energy usage, adjusts search parameters based on the current system state, and adaptively decides whether to enhance results with graph-based knowledge based on available energy. This implementation directly addresses the resource optimization and knowledge enhancement strategies outlined in the main specification, creating a system that can adapt its retrieval strategy based on current operational conditions.
+
 ```
 EnhancedRetrievalWithCRAG(query, parameters):
-  // Check system state and adjust parameters
   system_state ← cognitive_system.GetSystemState()
   adjusted_parameters ← AdjustParametersForState(parameters, system_state)
   
-  // Track operation start
   cognitive_system.RecordOperationStart("retrieval")
   
-  // Perform vector retrieval
-  vector_results ← vector_db.Search(
-    query_embedding: EmbedQuery(query),
-    parameters: adjusted_parameters
-  )
+  vector_results ← vector_db.Search(query_embedding: EmbedQuery(query), parameters: adjusted_parameters)
   
-  // Get dual-graph enhancements if energy sufficient
   energy_level ← cognitive_system.GetEnergyLevel()
   
   if energy_level > low_energy_threshold:
@@ -822,20 +789,11 @@ EnhancedRetrievalWithCRAG(query, parameters):
     merged_results ← MergeResults(vector_results, graph_results)
     results ← merged_results
   else:
-    // Use vector results only when energy is low
     results ← vector_results
   
-  // Track operation completion
   cognitive_system.RecordOperationComplete("retrieval")
   
-  return {
-    results,
-    system_info: {
-      state: system_state,
-      energy_level,
-      optimization_level: cognitive_system.GetOptimizationLevel()
-    }
-  }
+  return {results, system_info: {state: system_state, energy_level, optimization_level: cognitive_system.GetOptimizationLevel()}}
 ```
 
 ### 7.3 API Layer Adaptation
@@ -877,40 +835,35 @@ The CRAG system transforms a basic RAG implementation into a self-regulating cog
 
 ## 9. Error Handling in CRAG
 
-The CRAG system implements specialized error handling strategies that are adapted to its cognitive framework.
-
 ### 9.1 Energy-Aware Error Recovery
 
 Error handling in the CRAG system is modulated by the current energy state:
 
+The HandleCRAGError algorithm implements energy-aware error handling that adapts recovery strategies based on the system's current energy state. This approach extends the error handling framework described in the main specification by making recovery behavior dynamic rather than static. The system becomes more conservative in its retry policies as energy decreases, reducing maximum retries and increasing backoff periods to prevent error recovery from consuming critical resources. This implementation directly supports the system resilience principles described in the main specification, ensuring that error recovery itself doesn't exacerbate resource constraints during periods of system stress.
+
 ```
 HandleCRAGError(error, context):
-  // Get current system state and energy
   state ← cognitive_system.GetSystemState()
   energy_level ← cognitive_system.GetEnergyLevel()
   
-  // Classify error and get configuration
   error_type ← ClassifyError(error)
   error_config ← GetErrorConfiguration(error_type)
   
-  // Record error in system history
   cognitive_system.RecordErrorEvent(error_type, context)
   
-  // Modify retry behavior based on energy
   if error_config.retryable:
-    if state ∈ {CRITICAL, PROTECTIVE}:
-      max_retries ← min(1, error_config.max_retries)
-      backoff_factor ← error_config.backoff_factor * 2.0
-    else if state = OVERTIRED:
-      max_retries ← max(1, error_config.max_retries - 1)
-      backoff_factor ← error_config.backoff_factor * 1.5
+    if state is CRITICAL or PROTECTIVE:
+      max_retries ← minimum(1, error_config.max_retries)
+      backoff_factor ← error_config.backoff_factor × 2.0
+    else if state is OVERTIRED:
+      max_retries ← maximum(1, error_config.max_retries - 1)
+      backoff_factor ← error_config.backoff_factor × 1.5
     else:
       max_retries ← error_config.max_retries
       backoff_factor ← error_config.backoff_factor
     
     return RetryWithParameters(error, context, max_retries, backoff_factor)
   
-  // For non-retryable errors, determine recovery
   recovery_strategy ← DetermineRecoveryStrategy(error, context, state)
   
   return {handled: true, strategy: recovery_strategy, state, error_type}
@@ -920,64 +873,40 @@ HandleCRAGError(error, context):
 
 The CRAG system can defer error recovery to sleep cycles for non-critical errors:
 
+The DetermineRecoveryStrategy algorithm implements intelligent scheduling of error recovery operations, integrating with the sleep cycle framework. This mechanism enhances the system's resilience by deferring non-critical error recovery to appropriate sleep phases rather than handling all errors immediately. By evaluating whether recovery can be safely delayed, the system preserves resources for immediate operational needs while ensuring errors are still addressed during maintenance periods. This approach aligns with the maintenance scheduling strategies outlined in the main specification, treating error recovery as another form of system maintenance that can be prioritized and scheduled appropriately.
+
 ```
 DetermineRecoveryStrategy(error, context, state):
-  if CanDeferRecovery(error) and state ≠ PROTECTIVE:
-    // Schedule during next appropriate sleep cycle
-    sleep_task ← {
-      type: "error_recovery",
-      error: error,
-      context: context,
-      priority: DetermineRecoveryPriority(error)
-    }
+  if CanDeferRecovery(error) and state is not PROTECTIVE:
+    sleep_task ← {type: "error_recovery", error, context, priority: DetermineRecoveryPriority(error)}
     
     cognitive_system.ScheduleSleepTask(sleep_task)
     
-    return {
-      action: "deferred_to_sleep",
-      scheduled_cycle: DetermineSleepCycleForRecovery(error)
-    }
+    return {action: "deferred_to_sleep", scheduled_cycle: DetermineSleepCycleForRecovery(error)}
   
-  // Immediate recovery required
-  return {
-    action: "immediate_recovery",
-    steps: GenerateRecoverySteps(error, context, state)
-  }
+  return {action: "immediate_recovery", steps: GenerateRecoverySteps(error, context, state)}
 ```
 
 ### 9.3 Experience Graph Error Learning
 
 The CRAG system learns from errors by recording patterns in the Experience Graph:
 
+The RecordErrorInExperienceGraph algorithm implements an error pattern learning system that leverages the Experience Graph to improve future error handling. By recording error experiences as nodes in the graph and finding similarities between errors, the system can identify recurring patterns and generate higher-level abstractions about error categories. This approach extends the self-improvement capabilities described in the main specification to error handling, allowing the system to develop more sophisticated error management strategies over time. By scheduling error pattern abstraction during REM sleep cycles, the system continuously refines its understanding of error conditions and their appropriate responses.
+
 ```
 RecordErrorInExperienceGraph(error, context):
-  // Create error experience node
   error_text ← FormatErrorExperience(error, context)
   error_embedding ← EmbedText(error_text)
   
-  error_node_id ← experience_graph.AddExperience(
-    error_text, error_embedding,
-    {type: "error_experience", error_type: error.type}
-  )
+  error_node_id ← experience_graph.AddExperience(error_text, error_embedding, {type: "error_experience", error_type: error.type})
   
-  // Find similar error experiences
-  similar_errors ← experience_graph.FindSimilarNodes(
-    error_node_id, "error_experience", 5, 0.8
-  )
+  similar_errors ← experience_graph.FindSimilarNodes(error_node_id, "error_experience", 5, 0.8)
   
-  // Create connections to similar errors
   for each (similar_id, similarity) in similar_errors:
-    experience_graph.CreateEdge(
-      error_node_id, similar_id, "similar_error", similarity
-    )
+    experience_graph.CreateEdge(error_node_id, similar_id, "similar_error", similarity)
   
-  // If enough similar errors, generate abstraction
-  if |similar_errors| ≥ 3:
-    cognitive_system.ScheduleREMTask({
-      type: "error_pattern_abstraction",
-      node_ids: [error_node_id] + similar_ids,
-      priority: "medium"
-    })
+  if number of similar_errors ≥ 3:
+    cognitive_system.ScheduleREMTask({type: "error_pattern_abstraction", node_ids: [error_node_id] + similar_ids, priority: "medium"})
 ```
 
 ## 10. Security in CRAG
@@ -986,39 +915,25 @@ RecordErrorInExperienceGraph(error, context):
 
 The CRAG system leverages its energy model to enhance security:
 
+The ApplyEnergyBasedProtection algorithm implements adaptive security controls that become increasingly strict as system energy decreases. This energy-aware security approach extends the protection mechanisms described in the main specification by dynamically adjusting validation stringency and rate limits based on the current system state. During high-energy states, the system can afford more permissive validation, while low-energy states trigger stricter validation to prevent resource exhaustion attacks. This implementation directly addresses the security considerations outlined in the main specification, providing an additional layer of defense that becomes more aggressive as the system enters more vulnerable states.
+
 ```
 ApplyEnergyBasedProtection(request, client_info):
-  // Get current energy state
   state ← cognitive_system.GetSystemState()
   
-  // Apply stricter validation in lower energy states
   validation_level ← state.GetValidationLevel()
   
   validation_result ← ValidateRequestWithLevel(request, validation_level)
   if not validation_result.valid:
-    return {
-      allowed: false,
-      reason: "validation_failed",
-      details: validation_result.failures
-    }
+    return {allowed: false, reason: "validation_failed", details: validation_result.failures}
   
-  // Rate limiting based on energy state
   rate_limit_result ← CheckEnergyAwareRateLimit(client_info, state)
   if not rate_limit_result.allowed:
-    return {
-      allowed: false,
-      reason: "rate_limited",
-      retry_after: rate_limit_result.retry_after
-    }
+    return {allowed: false, reason: "rate_limited", retry_after: rate_limit_result.retry_after}
   
-  // Additional checks in protective mode
-  if state = PROTECTIVE:
+  if state is PROTECTIVE:
     if not IsRequestCritical(request):
-      return {
-        allowed: false,
-        reason: "protective_mode",
-        retry_after: EstimateRecoveryTime()
-      }
+      return {allowed: false, reason: "protective_mode", retry_after: EstimateRecoveryTime()}
   
   return {allowed: true}
 ```
@@ -1027,21 +942,18 @@ ApplyEnergyBasedProtection(request, client_info):
 
 The Memory Graph provides security benefits through access control and relationship validation:
 
+The ValidateRelationshipSecurity algorithm implements multi-layered validation for knowledge graph modifications. This security mechanism extends the data integrity protections described in the main specification by ensuring that relationship changes conform to ontological constraints, access control rules, and provenance requirements. By validating relationships before they are added to the Memory Graph, the system prevents knowledge corruption and unauthorized modifications. This approach is particularly important for maintaining the integrity of the structured knowledge representation that forms a critical component of the system's retrieval capabilities.
+
 ```
 ValidateRelationshipSecurity(source_id, relation_type, target_id):
-  // Check if relationship violates security constraints
-  
-  // 1. Ontological validation
   ontology_valid ← ValidateRelationshipOntology(source_id, relation_type, target_id)
   if not ontology_valid:
     return {valid: false, reason: "ontology_violation"}
   
-  // 2. Access control validation
   access_valid ← CheckRelationshipAccessControl(source_id, relation_type, target_id)
   if not access_valid:
     return {valid: false, reason: "access_control_violation"}
   
-  // 3. Provenance validation
   provenance_valid ← ValidateRelationshipProvenance(source_id, relation_type, target_id)
   if not provenance_valid:
     return {valid: false, reason: "invalid_provenance"}
@@ -1049,150 +961,9 @@ ValidateRelationshipSecurity(source_id, relation_type, target_id):
   return {valid: true}
 ```
 
-## 11. Testing Strategies for CRAG
+## 11. System Limitations and Future Work
 
-### 11.1 Energy Model Testing
-
-Testing the Cognitive Energy Model requires specialized approaches:
-
-```
-TestSuite: CognitiveEnergyModelTests
-    
-  Test: EnergyDepletionRates
-    // Setup
-    model ← new CognitiveEnergyModel(max_energy=100.0)
-    
-    // Execute various operations
-    model.RecordOperation("query", 1)
-    model.RecordOperation("embedding", 5)
-    
-    // Assert
-    Assert model.current_energy < 100.0
-    Assert model.current_energy = expected_value
-  
-  Test: StateTransitions
-    // Setup
-    model ← new CognitiveEnergyModel(max_energy=100.0)
-    
-    // Deplete to just above FATIGUED threshold
-    model.current_energy ← 80.1
-    
-    // Still in OPTIMAL
-    Assert model.UpdateSystemState() = OPTIMAL
-    
-    // Deplete slightly more to cross threshold
-    model.current_energy ← 79.9
-    
-    // Should transition to FATIGUED
-    Assert model.UpdateSystemState() = FATIGUED
-  
-  Test: SleepRecovery
-    // Setup
-    model ← new CognitiveEnergyModel(max_energy=100.0)
-    
-    // Deplete energy and increase entropy
-    model.current_energy ← 50.0
-    model.current_entropy ← 50.0
-    
-    // Simulate NAPPING sleep
-    SimulateSleep(model, NAPPING, 5.0)
-    
-    // Assert recovery
-    Assert model.current_energy > 50.0
-    Assert model.current_entropy < 50.0
-```
-
-### 11.2 Memory Graph Testing
-
-Testing the Memory Graph requires validation of knowledge representation and reasoning:
-
-```
-TestSuite: MemoryGraphTests
-    
-  Test: EntityCreation
-    // Setup
-    graph ← new MemoryGraph()
-    
-    // Add entity
-    result ← graph.AddEntity(
-      "Concept", "Artificial Intelligence",
-      {"definition": "The simulation of human intelligence"}
-    )
-    
-    // Assert
-    Assert result.success = true
-    
-    // Verify entity exists
-    entity ← graph.GetEntity(result.entity_id)
-    Assert entity.name = "Artificial Intelligence"
-  
-  Test: TransitiveInference
-    // Setup
-    graph ← new MemoryGraph()
-    
-    // Add entities and relationships
-    dog_id ← graph.AddEntity("Concept", "Dog").entity_id
-    mammal_id ← graph.AddEntity("Concept", "Mammal").entity_id
-    animal_id ← graph.AddEntity("Concept", "Animal").entity_id
-    
-    graph.AddRelationship(dog_id, "is_a", mammal_id)
-    graph.AddRelationship(mammal_id, "is_a", animal_id)
-    
-    // Query with transitive path
-    results ← graph.Query(dog_id, "is_a", 2)
-    
-    // Should find animal through transitive relationship
-    Assert animal_id in [result.entity_id for result in results]
-```
-
-### 11.3 Integration Testing
-
-Testing the integration between CRAG components:
-
-```
-TestSuite: CRAGIntegrationTests
-    
-  Test: ExperienceGraphMemoryGraphBridge
-    // Setup
-    cognitive_system ← new CognitiveSystem()
-    
-    // Add experience
-    text ← "The capital of France is Paris."
-    exp_id ← cognitive_system.experience_graph.AddExperience(text, EmbedText(text))
-    
-    // Extract and add to memory graph
-    knowledge_bridge ← new KnowledgeBridge(cognitive_system)
-    knowledge_bridge.ExtractAndAddKnowledge(exp_id)
-    
-    // Assert entities were created
-    Assert cognitive_system.memory_graph.EntityExists("France", "Country")
-    Assert cognitive_system.memory_graph.EntityExists("Paris", "City")
-    
-    // Assert relationship was created
-    paris_id ← cognitive_system.memory_graph.GetEntityByName("Paris").id
-    france_id ← cognitive_system.memory_graph.GetEntityByName("France").id
-    
-    Assert cognitive_system.memory_graph.RelationshipExists(
-      paris_id, "is_capital_of", france_id)
-  
-  Test: EnergySleepCycleIntegration
-    // Setup
-    cognitive_system ← new CognitiveSystem(max_energy=100.0)
-    
-    // Deplete energy to trigger sleep
-    cognitive_system.SetEnergy(25.0)  // Should be OVERTIRED
-    cognitive_system.SetEntropy(80.0) // High entropy
-    
-    // Should schedule REM sleep for high entropy
-    scheduled_sleep ← cognitive_system.DetermineNeededSleep()
-    
-    Assert scheduled_sleep.stage = REM
-    Assert scheduled_sleep.duration ≥ 15.0
-```
-
-## 12. System Limitations and Future Work
-
-### 12.1 Current Limitations
+### 11.1 Current Limitations
 
 The CRAG system has several inherent limitations:
 
@@ -1202,7 +973,7 @@ The CRAG system has several inherent limitations:
 4. **Computational Overhead**: The cognitive framework introduces additional computational overhead that must be balanced against performance benefits.
 5. **Cold Start Problem**: Both graph structures require significant data to provide value, creating a cold start challenge.
 
-### 12.2 Future Research Directions
+### 11.2 Future Research Directions
 
 Several promising areas for future enhancement include:
 
@@ -1212,32 +983,29 @@ Several promising areas for future enhancement include:
 4. **Cross-Modal Bridging**: Extending the Knowledge Bridge to handle multimodal information beyond text.
 5. **Distributed Cognitive Architecture**: Implementing distributed CRAG instances that share knowledge and coordinate sleep cycles.
 
+The ImplementAdaptiveEnergyModel algorithm outlines a future enhancement that would allow the system to self-tune its energy parameters based on operational history. This approach addresses one of the key limitations identified in the current system by analyzing past operation impacts and recovery effectiveness to propose optimized energy parameters. The implementation uses a gradual blending approach to avoid disruptive parameter changes. This enhancement aligns with the adaptive optimization strategies mentioned in the main specification, advancing the system's capability to self-regulate without manual parameter tuning across different deployment environments.
+
 ```
 ImplementAdaptiveEnergyModel():
-  // Collect operation metrics over time
   operation_history ← GetOperationHistory(30 days)
   
-  // Calculate optimal energy parameters
   depletion_analysis ← AnalyzeEnergyImpact(operation_history)
   recovery_analysis ← AnalyzeRecoveryEffectiveness(GetSleepHistory(30 days))
   
-  // Propose adjusted parameters
   proposed_parameters ← {
     depletion_rates: CalculateOptimalDepletionRates(depletion_analysis),
     recovery_rates: CalculateOptimalRecoveryRates(recovery_analysis),
     thresholds: DetermineOptimalThresholds(operation_history)
   }
   
-  // Gradually apply adjustments
   current_parameters ← GetCurrentParameters()
   blended_parameters ← BlendParameters(current_parameters, proposed_parameters, 0.2)
   
-  // Apply and monitor
   UpdateEnergyParameters(blended_parameters)
   ScheduleParameterEvaluation(7 days)
 ```
 
-## 13. Conclusion
+## 12. Conclusion
 
 The Cognitive RAG (CRAG) system represents a significant advancement in retrieval-augmented generation architectures by incorporating biologically-inspired self-regulation mechanisms. Through the energy model, sleep cycles, and dual-graph memory architecture, CRAG addresses critical challenges in maintaining system health, optimizing resource usage, and enhancing knowledge representation.
 
@@ -1250,3 +1018,5 @@ For production deployments, CRAG offers significant advantages in terms of susta
 Implementation of the CRAG architecture should follow the guidelines in this document, with careful consideration of the specific requirements and constraints of the target environment. Through appropriate tuning of energy parameters and sleep cycle scheduling, the system can be adapted to a wide range of operational contexts.
 
 Future research directions include enhancing the adaptive capabilities of the energy model, expanding the knowledge representation capabilities of the dual-graph architecture, and exploring distributed cognitive architectures for large-scale deployments.
+
+---

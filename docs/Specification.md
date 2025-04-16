@@ -1,6 +1,6 @@
 # Ultra-Fast, Lightweight RAG Engine: Detailed Specification & Implementation Plan
 
-This document outlines the design, architecture, and implementation plan for an ultra-fast, lightweight Retrieval-Augmented Generation (RAG) engine that is highly concurrent, dynamically self-refining, and coupled with real-time visualization. The system leverages advanced embedding generation, approximate nearest neighbor (ANN) search (via HNSW), recursive agent operations on a pandas-based data backend, and a multi-threaded FastAPI service for concurrent HTTP interactions. The entire system is enhanced with a cognitive system layer (CRAG) that provides self-regulation and memory optimization capabilities.
+This document provides a comprehensive design, architecture, and implementation specification for an advanced Retrieval-Augmented Generation (RAG) engine. The system is designed with principles of high concurrency, self-improvement, and cognitive regulation. It integrates cutting-edge embedding generation with approximate nearest neighbor (ANN) search through Hierarchical Navigable Small World (HNSW) algorithms, a recursive agent framework for content refinement, and a FastAPI-based service layer. The architecture includes the Cognitive RAG (CRAG) layer that introduces neurologically-inspired self-regulation and memory optimization capabilities.
 
 ## Table of Contents
 
@@ -71,14 +71,21 @@ This document outlines the design, architecture, and implementation plan for an 
 
 ## 1. Overview
 
-The RAG engine is designed to meet real-time requirements while retaining the flexibility to recursively refine and evolve its knowledge base. The system supports:
-- **Dynamic Embedding Generation:** Utilizing preloaded Large Language Models (LLMs) with built-in embedding modes to transform text into high-dimensional (1024 features) vectors.
-- **Efficient Similarity Search:** Powered by ANN techniques and HNSW for ultra-fast nearest neighbor retrieval.
-- **Recursive Data Enhancement:** Through a suite of specialized agents that expand, refine, merge, split, and prune content blocks.
-- **Pandas-based Query Engine:** For natural language query parsing and handling within lightweight, Pythonic data frames.
-- **Multi-Threaded FastAPI Backend:** Enabling concurrent queries, agent operations, and real-time WebSocket updates.
-- **Real-Time Visualization:** A standalone visualization application for exploring the knowledge graph, with interactive node actions, zoom, pan, and real-time highlighting.
-- **Cognitive System (CRAG):** Self-regulating framework with energy/entropy tracking, sleep cycles, and dual-graph memory formation.
+The RAG engine represents a next-generation approach to information retrieval and generation, specifically engineered for real-time processing while maintaining continuous self-improvement capabilities. The system delivers several cornerstone features:
+
+- **Dynamic Embedding Generation:** Leverages optimized Large Language Models (LLMs) to transform text into sophisticated high-dimensional vector representations (1024+ dimensions), capturing nuanced semantic meaning beyond keywords.
+
+- **Efficient Similarity Search:** Implements production-grade Approximate Nearest Neighbor (ANN) techniques using Hierarchical Navigable Small World (HNSW) graph structures, enabling sub-millisecond retrieval even with millions of vectors.
+
+- **Recursive Data Enhancement:** Deploys an ecosystem of specialized intelligent agents that systematically expand, refine, merge, split, and prune content blocks, creating a self-improving knowledge base that evolves with usage patterns.
+
+- **Pandas-based Query Engine:** Incorporates a lightweight, high-performance query processing system built on Pandas dataframes, enabling rapid filtering, joining, and transformation operations on retrieved content.
+
+- **Multi-Threaded FastAPI Backend:** Provides a modern, fully concurrent service layer capable of handling hundreds of simultaneous queries, agent operations, and real-time WebSocket update streams.
+
+- **Real-Time Visualization:** Features a dedicated visualization application for knowledge graph exploration with dynamic zooming, panning, node selection, and real-time highlighting of information pathways.
+
+- **Cognitive System (CRAG):** Incorporates a biologically-inspired self-regulatory framework with computational analogs to energy management, sleep cycles for maintenance, and a dual-graph memory architecture reflecting human memory consolidation processes.
 
 ---
 
@@ -86,7 +93,7 @@ The RAG engine is designed to meet real-time requirements while retaining the fl
 
 ### 2.1 Embedding & Data Processing
 
-The Embedding and Data Processing system transforms raw text into high-dimensional vector representations (embeddings) that capture semantic meaning. This crucial component serves as the foundation for the RAG engine's ability to understand and compare textual content. The system employs efficient batching strategies, caching mechanisms, and optional dimensionality reduction to balance performance with accuracy. By converting language into mathematical vectors, the system enables similarity comparisons that would be impossible with raw text.
+The Embedding and Data Processing system forms the foundation of semantic understanding by transforming natural language into mathematical vector spaces. This crucial component serves as the bridge between human language and machine-processable representations, enabling meaningful similarity comparisons. The system incorporates memory-efficient batching strategies, intelligent caching of frequently embedded texts, and configurable dimensionality reduction techniques to optimize the performance-accuracy tradeoff.
 
 ```
 Algorithm: EmbeddingGeneration
@@ -1308,5 +1315,17 @@ This specification document serves as both a blueprint for implementation and a 
 | Entropy | Measure of system disorder in the cognitive system |
 | Sleep Cycle | Period of system maintenance and optimization |
 | Vector Database | Storage system optimized for vector embeddings |
+| LLM | Large Language Model, an AI system trained on vast text data capable of generating human-like text |
+| Semantic Similarity | Measure of meaning-based resemblance between texts beyond keyword matching |
+| Cosine Similarity | Vector similarity metric measuring angle between vectors, widely used for embedding comparison |
+| Latent Space | Abstract multi-dimensional space where embeddings exist and semantic relationships are preserved |
+| Inference | Process of generating predictions or outputs from a trained model given new inputs |
+| Token | Basic unit of text processing in language models, can be words, subwords, or characters |
+| Context Window | Maximum amount of text a language model can process at once during operation |
+| Zero-shot Learning | AI's ability to make predictions for classes or tasks it hasn't seen during training |
+| Few-shot Learning | AI's ability to learn from very few examples of a new task or concept |
+| Knowledge Graph | Network structure representing semantic relationships between entities as a graph |
+| Attention Mechanism | Neural network component that allows models to focus on relevant parts of input data |
+| Dimensionality Reduction | Techniques to reduce vector dimensions while preserving information relationships |
 
 ---
