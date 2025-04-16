@@ -1,5 +1,54 @@
 # Cognitive RAG (CRAG) System Technical Specification
 
+## Table of Contents
+
+- [1. Introduction](#1-introduction)
+- [2. Core Concepts](#2-core-concepts)
+  - [2.1 Cognitive Energy Model](#21-cognitive-energy-model)
+  - [2.2 System States](#22-system-states)
+  - [2.3 Sleep Stages](#23-sleep-stages)
+- [3. Awake State Phases](#3-awake-state-phases)
+  - [3.1 Alert Phase](#31-alert-phase)
+  - [3.2 Focused Phase](#32-focused-phase)
+  - [3.3 Conservation Phase](#33-conservation-phase)
+  - [3.4 Emergency Phase](#34-emergency-phase)
+- [4. Sleep Phases](#4-sleep-phases)
+  - [4.1 NAPPING Phase](#41-napping-phase)
+  - [4.2 SLOW_WAVE Phase](#42-slow_wave-phase)
+  - [4.3 REM Phase](#43-rem-phase)
+  - [4.4 RECOVERY Phase](#44-recovery-phase)
+- [5. Dual-Graph Memory Architecture](#5-dual-graph-memory-architecture)
+  - [5.1 Experience Graph](#51-experience-graph)
+    - [5.1.1 Experience Graph Architecture](#511-experience-graph-architecture)
+    - [5.1.2 Experience Graph Operations](#512-experience-graph-operations)
+  - [5.2 Memory Graph](#52-memory-graph)
+    - [5.2.1 Memory Graph Architecture](#521-memory-graph-architecture)
+    - [5.2.2 Memory Graph Operations](#522-memory-graph-operations)
+    - [5.2.3 Memory Graph Population and Maintenance](#523-memory-graph-population-and-maintenance)
+  - [5.3 Dual-Graph Integration](#53-dual-graph-integration)
+    - [5.3.1 Cross-Graph Retrieval](#531-cross-graph-retrieval)
+    - [5.3.2 Knowledge Bridge Mechanism](#532-knowledge-bridge-mechanism)
+  - [5.4 Memory Graph vs Experience Graph Comparison](#54-memory-graph-vs-experience-graph-comparison)
+- [6. Server-Specific Adaptations](#6-server-specific-adaptations)
+- [7. Integration with OARC-RAG Architecture](#7-integration-with-oarc-rag-architecture)
+  - [7.1 Vector Database Enhancement](#71-vector-database-enhancement)
+  - [7.2 RAG Engine Integration](#72-rag-engine-integration)
+  - [7.3 API Layer Adaptation](#73-api-layer-adaptation)
+  - [7.4 System Interconnection Architecture](#74-system-interconnection-architecture)
+  - [7.5 Implementation Strategy](#75-implementation-strategy)
+- [8. CRAG System Benefits for OARC-RAG](#8-crag-system-benefits-for-oarc-rag)
+- [9. Error Handling in CRAG](#9-error-handling-in-crag)
+  - [9.1 Energy-Aware Error Recovery](#91-energy-aware-error-recovery)
+  - [9.2 Sleep Cycle Integration](#92-sleep-cycle-integration)
+  - [9.3 Experience Graph Error Learning](#93-experience-graph-error-learning)
+- [10. Security in CRAG](#10-security-in-crag)
+  - [10.1 Energy-Based Protection Mechanisms](#101-energy-based-protection-mechanisms)
+  - [10.2 Memory Graph Security](#102-memory-graph-security)
+- [11. System Limitations and Future Work](#11-system-limitations-and-future-work)
+  - [11.1 Current Limitations](#111-current-limitations)
+  - [11.2 Future Research Directions](#112-future-research-directions)
+- [12. Conclusion](#12-conclusion)
+
 ## 1. Introduction
 
 This document outlines the technical design and implementation of the Cognitive RAG (CRAG) system for the OARC-RAG framework. The system implements computational analogs of biological cognitive processes, particularly the sleep-wake cycle and memory consolidation mechanisms, to create an efficient, self-regulating RAG system capable of continuous operation in server environments.
@@ -393,6 +442,33 @@ The Experience Graph supports several operations for memory formation and retrie
 4. **Abstraction Generation**: Synthesizes higher-level concepts
 5. **Meme Identification**: Detects recurring patterns
 
+The Experience Graph operations work together to create an associative memory system that models how human brains form connections between related information. The node activation mechanism reinforces frequently accessed information, making it more likely to be retrieved in future queries. Edge formation creates explicit connections between related concepts, while clustering groups similar content to support abstraction. The abstraction generation process is particularly important as it creates higher-level concepts from patterns in lower-level nodes, enabling the system to develop increasingly sophisticated understanding of its knowledge domain.
+
+```
+ActivateNode(node_id, activation_strength):
+  node ← GetNode(node_id)
+  if node is null: return false
+  
+  node.activation ← node.activation + activation_strength
+  node.last_activated ← current_time()
+  
+  SpreadActivation(node_id, activation_strength × 0.5, 1)
+  
+  return true
+
+SpreadActivation(source_id, strength, depth):
+  if depth > max_activation_depth or strength < min_activation_threshold:
+    return
+  
+  connected_nodes ← GetConnectedNodes(source_id)
+  for each target_id, edge_weight in connected_nodes:
+    spread_strength ← strength × edge_weight
+    node ← GetNode(target_id) 
+    node.activation ← node.activation + spread_strength
+    
+    SpreadActivation(target_id, spread_strength × 0.5, depth + 1)
+```
+
 ### 5.2 Memory Graph
 
 The Memory Graph provides structured knowledge representation through explicit semantic relationships. Unlike the associative nature of the Experience Graph, the Memory Graph focuses on precise, typed relationships between entities.
@@ -751,6 +827,8 @@ HandleRequest(request_data, priority):
   return {status: "success", result, system_state, energy_level}
 ```
 
+The server-specific adaptations enable the CRAG system to operate reliably in production environments by integrating energy awareness into request handling. The server implementation includes priority-based request processing, where higher-priority requests can interrupt sleep cycles when necessary. Additionally, the system can reject non-critical requests during protective states to conserve resources, allowing the server to recover from extreme load conditions without manual intervention. These mechanisms collectively ensure 24/7 operational capability with graceful performance degradation under stress.
+
 ## 7. Integration with OARC-RAG Architecture
 
 The CRAG system integrates with core components of the OARC-RAG system as defined in `Specification.md`.
@@ -803,9 +881,13 @@ The CRAG system adapts the API layer to provide:
 - Enhanced retrieval capabilities
 - Priority-based request handling
 
+The API layer adaptations enable clients to interact with the cognitive aspects of the system, providing additional context about retrieval operations. Clients can receive information about the current system state, energy levels, and optimization settings along with query results. This transparency allows applications to adapt their interaction patterns based on the cognitive system's current state, potentially delaying non-critical operations when the system is in resource-constrained states, or enabling more comprehensive queries when energy levels are high.
+
 ### 7.4 System Interconnection Architecture
 
 The CRAG system integrates seamlessly with the OARC-RAG architecture, connecting core components such as the Vector Database, RAG Engine, and API Interface.
+
+The system interconnection architecture enables the cognitive components to influence and enhance the core RAG operations without requiring fundamental changes to the base architecture. The cognitive system's energy model serves as a central coordination mechanism, providing system state information that influences parameter settings, operation scheduling, and retrieval strategies across all components. This architecture follows the principles of progressive enhancement, where cognitive capabilities are layered on top of the base functionality, allowing the system to continue operating even if cognitive components are temporarily unavailable.
 
 ### 7.5 Implementation Strategy
 
@@ -961,6 +1043,8 @@ ValidateRelationshipSecurity(source_id, relation_type, target_id):
   return {valid: true}
 ```
 
+The Memory Graph security mechanisms work together to protect the integrity of the knowledge graph. The ontological validation ensures that relationships comply with the defined domain model, preventing semantic inconsistencies. Access control validation enforces permissions on entities and relationships, limiting modifications to authorized users or processes. Provenance validation verifies that new relationships have appropriate sourcing and confidence levels. These layered protections preserve the structured knowledge representation's reliability, ensuring that inferences and query results maintain high quality and trustworthiness.
+
 ## 11. System Limitations and Future Work
 
 ### 11.1 Current Limitations
@@ -1005,6 +1089,8 @@ ImplementAdaptiveEnergyModel():
   ScheduleParameterEvaluation(7 days)
 ```
 
+The adaptive energy model represents a significant advancement toward fully autonomous operation. By analyzing operational patterns, the system can identify which types of operations consume more energy than expected, which sleep cycles provide the most effective recovery, and what threshold adjustments would optimize performance. This self-tuning capability would eliminate the need for manual calibration across different deployment environments, allowing the system to automatically adapt to the specific workload patterns and hardware constraints of each installation.
+
 ## 12. Conclusion
 
 The Cognitive RAG (CRAG) system represents a significant advancement in retrieval-augmented generation architectures by incorporating biologically-inspired self-regulation mechanisms. Through the energy model, sleep cycles, and dual-graph memory architecture, CRAG addresses critical challenges in maintaining system health, optimizing resource usage, and enhancing knowledge representation.
@@ -1018,5 +1104,3 @@ For production deployments, CRAG offers significant advantages in terms of susta
 Implementation of the CRAG architecture should follow the guidelines in this document, with careful consideration of the specific requirements and constraints of the target environment. Through appropriate tuning of energy parameters and sleep cycle scheduling, the system can be adapted to a wide range of operational contexts.
 
 Future research directions include enhancing the adaptive capabilities of the energy model, expanding the knowledge representation capabilities of the dual-graph architecture, and exploring distributed cognitive architectures for large-scale deployments.
-
----
