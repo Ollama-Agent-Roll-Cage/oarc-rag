@@ -1,6 +1,6 @@
 # Ultra-Fast, Lightweight RAG Engine: Detailed Specification & Implementation Plan
 
-This document outlines the design, architecture, and implementation plan for an ultra-fast, lightweight Retrieval-Augmented Generation (RAG) engine that is highly concurrent, dynamically self-refining, and coupled with real-time visualization. The system leverages advanced embedding generation, approximate nearest neighbor (ANN) search (via HNSW), recursive agent operations on a pandas-based data backend, and a multi-threaded FastAPI service for concurrent HTTP interactions.
+This document outlines the design, architecture, and implementation plan for an ultra-fast, lightweight Retrieval-Augmented Generation (RAG) engine that is highly concurrent, dynamically self-refining, and coupled with real-time visualization. The system leverages advanced embedding generation, approximate nearest neighbor (ANN) search (via HNSW), recursive agent operations on a pandas-based data backend, and a multi-threaded FastAPI service for concurrent HTTP interactions. The entire system is enhanced with a cognitive system layer (CRAG) that provides self-regulation and memory optimization capabilities.
 
 ## Table of Contents
 
@@ -15,7 +15,7 @@ This document outlines the design, architecture, and implementation plan for an 
     - [2.4.1 Vector Database System](#241-vector-database-system)
     - [2.4.2 Database Schema](#242-database-schema)
   - [2.5 API & Concurrency](#25-api--concurrency)
-  - [2.6 Visualization Module](#26-visualization-module-pygame)
+  - [2.6 Visualization Module](#26-visualization-module)
   - [2.7 Resource Collection System](#27-resource-collection-system)
   - [2.8 Performance Monitoring](#28-performance-monitoring)
   - [2.9 Multi-Level Caching System](#29-multi-level-caching-system)
@@ -31,57 +31,41 @@ This document outlines the design, architecture, and implementation plan for an 
     - [2.12.1 Document Processing Pipeline](#2121-document-processing-pipeline)
     - [2.12.2 Web Crawling & Scraping](#2122-web-crawling--scraping)
     - [2.12.3 Multimodal Content Handling](#2123-multimodal-content-handling)
+  - [2.13 Cognitive System Integration (CRAG)](#213-cognitive-system-integration-crag)
+    - [2.13.1 Energy and Entropy Management](#2131-energy-and-entropy-management)
+    - [2.13.2 Sleep Cycles](#2132-sleep-cycles)
+    - [2.13.3 Dual-Graph Memory System](#2133-dual-graph-memory-system)
+      - [2.13.3.1 Memory Graph](#21331-memory-graph)
+      - [2.13.3.2 Memory Graph vs. Experience Graph](#21332-memory-graph-vs-experience-graph)
+      - [2.13.3.3 Dual-Graph Integration](#21333-dual-graph-integration)
+  - [2.14 System Dependencies](#214-system-dependencies)
+    - [2.14.1 Core Dependencies](#2141-core-dependencies)
+    - [2.14.2 LLM Integration Dependencies](#2142-llm-integration-dependencies)
+    - [2.14.3 Visualization Dependencies](#2143-visualization-dependencies)
+    - [2.14.4 Performance Dependencies](#2144-performance-dependencies)
+    - [2.14.5 Testing Dependencies](#2145-testing-dependencies)
+    - [2.14.6 Optional Dependencies](#2146-optional-dependencies)
+  - [2.15 Error Handling & Recovery](#215-error-handling--recovery)
+  - [2.16 Security Considerations](#216-security-considerations)
+    - [2.16.1 Internal Data Security](#2161-internal-data-security)
 - [3. Implementation Plan](#3-implementation-plan)
   - [3.1 Phase 1: Core Infrastructure](#31-phase-1-core-infrastructure)
   - [3.2 Phase 2: Agent System Development](#32-phase-2-agent-system-development)
   - [3.3 Phase 3: Data Acquisition System](#33-phase-3-data-acquisition-system)
   - [3.4 Phase 4: API and Services](#34-phase-4-api-and-services)
   - [3.5 Phase 5: Optimization & Scaling](#35-phase-5-optimization--scaling)
-  - [3.6 Development Timeline](#36-development-timeline)
-- [4. Testing Strategy](#4-testing-strategy)
-  - [4.1 Testing Architecture](#41-testing-architecture)
-  - [4.2 Test Types](#42-test-types)
-    - [4.2.1 Unit Tests](#421-unit-tests)
-    - [4.2.2 Integration Tests](#422-integration-tests)
-    - [4.2.3 End-to-End Tests](#423-end-to-end-tests)
-  - [4.3 Testing Environment Setup](#43-testing-environment-setup)
-  - [4.4 Ollama Integration Testing](#44-ollama-integration-testing)
-  - [4.5 Continuous Integration](#45-continuous-integration)
-  - [4.6 Code Coverage](#46-code-coverage)
-- [4.7 Testing Challenges and Solutions](#47-testing-challenges-and-solutions)
-  - [4.8 Test-Driven Development Approach](#48-test-driven-development-approach)
-- [5. Future Considerations](#5-future-considerations)
+  - [3.6 Phase 6: Cognitive System Implementation](#36-phase-6-cognitive-system-implementation)
+- [4. Testing & Validation](#4-testing--validation)
+  - [4.1 Test Methodology](#41-test-methodology)
+  - [4.2 Performance Benchmarks](#42-performance-benchmarks)
+  - [4.3 Compliance Validation](#43-compliance-validation)
+- [5. Operational Procedures](#5-operational-procedures)
+  - [5.1 Deployment Guidelines](#51-deployment-guidelines)
+  - [5.2 Monitoring & Maintenance](#52-monitoring--maintenance)
+  - [5.3 Scaling Considerations](#53-scaling-considerations)
 - [6. Conclusion](#6-conclusion)
-- [7. Best Practices](#7-best-practices)
-  - [7.1 Document Preparation](#71-document-preparation)
-  - [7.2 Query Optimization](#72-query-optimization)
-  - [7.3 Context Assembly](#73-context-assembly)
-  - [7.4 System Maintenance](#74-system-maintenance)
-  - [7.5 Design Pattern Usage](#75-design-pattern-usage)
-  - [7.6 Testing Best Practices](#76-testing-best-practices)
-- [8. Usage Examples](#8-usage-examples)
-  - [8.1 Basic RAG Workflow](#81-basic-rag-workflow)
-  - [8.2 Advanced Query Strategies](#82-advanced-query-strategies)
-  - [8.3 Performance Optimization](#83-performance-optimization)
-- [9. System Dependencies](#9-system-dependencies)
-  - [9.1 Required Dependencies](#91-required-dependencies)
-  - [9.2 Optional Dependencies](#92-optional-dependencies)
-  - [9.3 Vector Operations Utilities](#93-vector-operations-utilities)
-- [10. Appendix](#10-appendix)
-  - [10.1 Glossary](#101-glossary)
-  - [10.2 Code Examples](#102-code-examples)
-    - [10.2.1 Vector Database Examples](#1021-vector-database-examples)
-    - [10.2.2 Agent Integration Examples](#1022-agent-integration-examples)
-    - [10.2.3 Performance Optimization Examples](#1023-performance-optimization-examples)
-    - [10.2.4 Testing Examples](#1024-testing-examples)
-  - [10.3 Project Structure](#103-project-structure)
-    - [10.3.1 Codebase Organization](#1031-codebase-organization)
-    - [10.3.2 Key Modules](#1032-key-modules)
-- [11. Implementation Risks and Mitigations](#11-implementation-risks-and-mitigations)
-  - [11.1 Technical Risks](#111-technical-risks)
-  - [11.2 Process Risks](#112-process-risks)
-- [12. Success Metrics](#12-success-metrics)
-- [13. Frequently Asked Questions](#13-frequently-asked-questions)
+- [7. Appendices](#7-appendices)
+  - [7.1 Glossary of Terms](#71-glossary-of-terms)
 
 ---
 
@@ -93,1972 +77,1236 @@ The RAG engine is designed to meet real-time requirements while retaining the fl
 - **Recursive Data Enhancement:** Through a suite of specialized agents that expand, refine, merge, split, and prune content blocks.
 - **Pandas-based Query Engine:** For natural language query parsing and handling within lightweight, Pythonic data frames.
 - **Multi-Threaded FastAPI Backend:** Enabling concurrent queries, agent operations, and real-time WebSocket updates.
-- **Real-Time Visualization:** A standalone Pygame application for visually exploring the knowledge graph, with interactive node actions, zoom, pan, and real-time highlighting.
-
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
-
-flowchart TD
-    %% Styling classes with monochrome patterns - white strokes for dark theme
-    classDef core stroke:#fff,stroke-width:3px,color:#fff
-    classDef supporting stroke:#fff,stroke-width:1px,stroke-dasharray:5 5,color:#fff
-    classDef data stroke:#fff,stroke-width:1px,stroke-dasharray:3 3,color:#fff
-    classDef client stroke:#fff,stroke-width:2px,color:#fff
-    classDef agent stroke:#fff,stroke-width:1px,stroke-dasharray:10 5,color:#fff
-    classDef viz stroke:#fff,stroke-width:1px,stroke-dasharray:1 1,color:#fff
-    classDef pattern stroke:#fff,stroke-width:2px,stroke-dasharray:15 5,color:#fff
-    classDef test stroke:#fff,stroke-width:1px,stroke-dasharray:5 2,color:#fff
-
-    %% User, API and Core Engine
-    User([User])
-    API[FastAPI Service]:::client
-    RAGEngine[RAG Engine]:::core
-
-    %% Core Components without subgraphs
-    %% Embedding System
-    EmbGen[Embedding Generator]:::supporting
-    BatchProc[Batch Processing]:::supporting
-    EmbCache[(Embedding Cache)]:::data
-    
-    %% Vector Search
-    HNSW[HNSW Graph]:::supporting
-    Meta[Metadata Integration]:::supporting
-    VecOps[Vector Operations]:::supporting
-    
-    %% Storage Layer
-    PandasDF[Pandas DataFrame]:::data
-    PyArrow[PyArrow]:::data
-    Parquet[Parquet Files]:::data
-    VecDB[Vector Database]:::data
-    
-    %% Query Components
-    NLQuery[NL Query Parser]:::supporting
-    QueryExec[Query Executor]:::supporting
-    VecSearch[Vector Search]:::supporting
-    
-    %% Design Patterns
-    SingletonPat[Singleton Pattern]:::pattern
-    FactoryPat[Factory Pattern]:::pattern
-    ServiceRegistry[(Service Registry)]:::data
-    ObjectCreation[Object Creation]:::pattern
-    
-    %% Agent Components
-    RecExp[Expansion Agent]:::agent
-    Merge[Merge Agent]:::agent
-    Split[Split Agent]:::agent
-    Prune[Prune Agent]:::agent
-    RAGEnhanced[RAG Enhanced Agent]:::agent
-    
-    %% Caching
-    QueryCache[Query Cache]:::data
-    DocCache[Document Cache]:::data
-    EmbeddingCache[Embedding Cache]:::data
-    TTLConfig[TTL Configuration]:::supporting
-    LRUEviction[LRU Eviction]:::supporting
-    
-    %% Resource Collection
-    ModCore[Modular Collection Core]:::supporting
-    WebScraper[Web Scrapers]:::supporting
-    APIConn[API Connectors]:::supporting
-    FSProc[File System Processors]:::supporting
-    
-    %% Monitoring
-    RAGMon[RAG Monitor]:::supporting
-    PerfMetrics[(Performance Metrics)]:::data
-    DashGen[Dashboard Generator]:::supporting
-    
-    %% Visualization
-    Pygame[Pygame App]:::viz
-    Graph[Knowledge Graph]:::viz
-    NodeActions[Interactive Nodes]:::viz
-    WebSocket[WebSocket Updates]:::viz
-    
-    %% Testing
-    UnitTests[Unit Tests]:::test
-    IntegrationTests[Integration Tests]:::test
-    E2ETests[End-to-End Tests]:::test
-    MockLayer[Mock Layer]:::test
-    CIWorkflow[CI Workflow]:::test
-    
-    %% Codebase
-    SrcDir["src/"]:::supporting
-    TestsDir["tests/"]:::test
-    DocsDir["docs/"]:::supporting
-    RagModule["rag/"]:::core
-    AIModule["ai/"]:::supporting
-    UtilsModule["utils/"]:::supporting
-    
-    %% Core connections
-    User --> API --> RAGEngine
-    
-    %% Embedding flow
-    RAGEngine --> EmbGen --> BatchProc --> EmbCache
-    
-    %% Vector operations flow
-    VecOps --> HNSW --> Meta
-    RAGEngine --> VecOps
-    
-    %% Storage connections
-    PandasDF --> PyArrow
-    PandasDF --> Parquet
-    PandasDF --- VecDB
-    
-    %% Query flow
-    NLQuery --> QueryExec
-    QueryExec --> PandasDF
-    QueryExec --> VecSearch
-    VecSearch --> VecDB
-    RAGEngine --> NLQuery
-    
-    %% Patterns connections
-    SingletonPat --- ServiceRegistry
-    FactoryPat --- ObjectCreation
-    SingletonPat --> RAGEngine
-    FactoryPat --> API
-    FactoryPat --> RecExp
-    
-    %% Agent connections
-    RAGEngine --> RecExp
-    RAGEngine --> Merge
-    RAGEngine --> Split
-    RAGEngine --> Prune
-    RAGEngine --> RAGEnhanced
-    RAGEnhanced --> VecOps
-    
-    %% Caching connections
-    QueryCache & DocCache & EmbeddingCache --> TTLConfig
-    QueryCache & DocCache & EmbeddingCache --> LRUEviction
-    EmbCache --> EmbeddingCache
-    RAGEngine --> QueryCache
-    
-    %% Resource collection
-    ModCore --> WebScraper
-    ModCore --> APIConn
-    ModCore --> FSProc
-    RAGEngine <--> ModCore
-    
-    %% Monitoring connections
-    RAGEngine --> RAGMon --> PerfMetrics --> DashGen
-    
-    %% Visualization connections
-    API <--> WebSocket --> Graph
-    Pygame --> Graph --> NodeActions
-    
-    %% Testing connections
-    MockLayer -.-> UnitTests --> IntegrationTests --> E2ETests
-    UnitTests & IntegrationTests & E2ETests --> CIWorkflow
-    UnitTests -.-> RAGEngine
-    IntegrationTests -.-> API
-    
-    %% Code structure
-    SrcDir --> RagModule & AIModule & UtilsModule
-    TestsDir --> UnitTests
-    RagModule --> RAGEngine
-```
+- **Real-Time Visualization:** A standalone visualization application for exploring the knowledge graph, with interactive node actions, zoom, pan, and real-time highlighting.
+- **Cognitive System (CRAG):** Self-regulating framework with energy/entropy tracking, sleep cycles, and dual-graph memory formation.
 
 ---
 
 ## 2. System Architecture
 
 ### 2.1 Embedding & Data Processing
-- **Embedding Pipeline:**
-  - **Input Processing:** Blocks of text up to 512 words are transformed by the LLM's embedding mode to produce dense 1024-dimensional vectors.
-  - **Dimensionality Considerations:** Optionally apply PCA (or sparse PCA, if beneficial) to reduce dimensionality while preserving key semantic variance. PCA is favored because of the dense nature of the LLM embeddings.
-  - **Batch & Cache Processing:** Leverage batch processing to generate embeddings and employ caching strategies for repeated or common queries.
+
+The Embedding and Data Processing system transforms raw text into high-dimensional vector representations (embeddings) that capture semantic meaning. This crucial component serves as the foundation for the RAG engine's ability to understand and compare textual content. The system employs efficient batching strategies, caching mechanisms, and optional dimensionality reduction to balance performance with accuracy. By converting language into mathematical vectors, the system enables similarity comparisons that would be impossible with raw text.
+
+```
+Algorithm: EmbeddingGeneration
+
+GenerateEmbeddings(text_chunks, model, batch_size=16, use_cache=true):
+  embeddings ← []
+  remaining_chunks ← []
+  
+  // Use cache if enabled
+  if use_cache:
+    for each chunk in text_chunks:
+      cache_key ← Hash(chunk)
+      if cache_key in embedding_cache:
+        embeddings.append(embedding_cache[cache_key])
+      else:
+        remaining_chunks.append(chunk)
+  else:
+    remaining_chunks ← text_chunks
+  
+  // Process remaining chunks in batches
+  for each batch in Batches(remaining_chunks, batch_size):
+    batch_embeddings ← model.embed(batch)
+    
+    // Store in cache and results
+    for i from 0 to |batch|-1:
+      if use_cache:
+        embedding_cache[Hash(batch[i])] ← batch_embeddings[i]
+      embeddings.append(batch_embeddings[i])
+  
+  return embeddings
+```
 
 ### 2.2 Similarity Search via ANN/HNSW
-- **Approximate Nearest Neighbors (ANN):**
-  - Implement fast similarity retrieval using proprietary matrix math algorithms.
-  - Leverage custom-built vector search optimizations without third-party dependencies.
-  - Utilize scikit-learn and scipy for dimensionality reduction and efficient mathematical operations.
-- **HNSW Indexing:**
-  - Deploy a Hierarchical Navigable Small World Graph for scalable search.
-  - Ensure metadata integration for fast lookups and to support recursive agent operations (e.g., backtrace of related blocks).
+
+The Similarity Search system enables efficient retrieval of semantically similar content from potentially millions of vectors. Rather than performing exhaustive comparisons, the system implements Hierarchical Navigable Small World (HNSW) graphs to achieve logarithmic-time lookups. This approach creates a multi-layered graph structure where nodes represent vectors and edges connect similar vectors, allowing for rapid traversal to the nearest neighbors of a query vector. The result is a dramatic reduction in search time while maintaining high recall accuracy.
+
+```
+Algorithm: HNSWSearch
+
+SearchHNSW(query_vector, index, top_k=5, ef_search=100):
+  // Set search parameters
+  index.set_ef(ef_search)
+  
+  // Perform search
+  ids, distances ← index.knn_query(query_vector, k=top_k)
+  
+  // Convert distances to similarities
+  similarities ← [1 - distance for distance in distances]
+  
+  // Create result objects
+  results ← []
+  for i from 0 to |ids|-1:
+    results.append({id: ids[i], similarity: similarities[i]})
+  
+  // Sort by similarity
+  Sort results by similarity (descending)
+  
+  return results
+```
 
 ### 2.2.1 Vector Operations
 
-The system incorporates a comprehensive suite of vector operations to support efficient similarity search and embedding manipulation:
+The Vector Operations subsystem implements fundamental mathematical functions for working with embeddings. These operations form the mathematical foundation for all similarity calculations and vector manipulations throughout the system. Efficient implementations of these operations are critical for system performance, as they are executed millions of times during normal operation. The system includes specialized functions for vector normalization, similarity calculation, and batch processing to maximize computational efficiency.
 
-- **Similarity Operations:**
-  - **Cosine Similarity:** Optimized measurement of the cosine angle between vectors for semantic matching.
-  - **Batch Similarity:** Efficient parallel computation of similarities between one query vector and multiple candidate vectors.
+```
+Algorithm: VectorOperations
 
-- **Vector Transformations:**
-  - **Normalization:** Converting vectors to unit length while preserving direction.
-  - **Dimension Reduction:** Using PCA to reduce embedding size while preserving semantic relationships.
-  - **Vector Aggregation:** Methods for combining vectors including mean, weighted average, and concatenation.
+NormalizeVector(vector):
+  norm ← SquareRoot(Sum(vector[i]² for all i))
+  if norm > 0:
+    return [vector[i]/norm for all i]
+  return vector  // Zero vector
 
-- **Advanced Operations:**
-  - **Diverse Vector Selection:** Algorithms to find maximally different vectors from a collection.
-  - **Outlier Detection:** Statistical methods to identify anomalous vectors.
-  - **Statistical Analysis:** Functions to compute vector distribution characteristics.
+CosineSimilarity(vector1, vector2):
+  v1 ← NormalizeVector(vector1)
+  v2 ← NormalizeVector(vector2)
+  return Sum(v1[i] × v2[i] for all i)
 
-```python
-# Example of advanced vector operations
-def find_diverse_vectors(vectors, count=3, min_similarity_threshold=0.7):
-    """Identify a subset of vectors that are maximally different from each other."""
-    if len(vectors) <= count:
-        return list(range(len(vectors)))
-    
-    # Start with first vector
-    selected_indices = [0]
-    
-    while len(selected_indices) < count:
-        max_min_distance = -1
-        best_idx = -1
-        
-        # For each candidate vector
-        for i in range(len(vectors)):
-            if i in selected_indices:
-                continue
-            
-            # Find minimum similarity to any already selected vector
-            min_similarity = min(cosine_similarity(vectors[i], vectors[j]) 
-                               for j in selected_indices)
-            
-            # Select vector with lowest maximum similarity (most diverse)
-            if min_similarity < min_similarity_threshold and -min_similarity > max_min_distance:
-                max_min_distance = -min_similarity
-                best_idx = i
-        
-        if best_idx == -1:
-            break  # No more sufficiently diverse vectors
-            
-        selected_indices.append(best_idx)
-    
-    return selected_indices
+BatchSimilarity(query_vector, candidate_vectors):
+  norm_query ← NormalizeVector(query_vector)
+  similarities ← []
+  
+  for each candidate in candidate_vectors:
+    norm_candidate ← NormalizeVector(candidate)
+    similarity ← Sum(norm_query[i] × norm_candidate[i] for all i)
+    similarities.append(similarity)
+  
+  return similarities
 ```
 
-#### 2.2.2 PCA-Based Indexing Optimization
+### 2.2.2 PCA-Based Indexing Optimization
 
-The RAG engine employs Principal Component Analysis (PCA) to create an optimized indexing structure for rapid vector lookups:
+The PCA-Based Indexing Optimization system enhances search performance by reducing the dimensionality of embedding vectors while preserving their semantic relationships. Principal Component Analysis (PCA) identifies the most informative dimensions in the embedding space, allowing the system to represent vectors with fewer dimensions while retaining most of their semantic information. This optimization creates a two-tier search architecture where initial candidate selection uses reduced vectors for speed, followed by precise re-ranking with full vectors for accuracy.
 
-- **Dimensionality Reduction:** High-dimensional embeddings (e.g., 1024 dimensions) are projected to lower-dimensional spaces (typically 128-256 dimensions) while preserving semantic relationships.
-- **Fast Index Table:** The reduced vectors are stored in a specialized fast index table that supports sub-linear time lookups.
-- **Two-Tier Search Strategy:** 
-  1. First-pass retrieval uses the reduced-dimension index for efficient candidate selection
-  2. Second-pass refinement re-ranks candidates using the full-dimension vectors for maximum accuracy
+```
+Algorithm: PCAIndexOptimization
 
-```python
-# Example of PCA-based index creation
-def create_pca_index(vectors: np.ndarray, target_dimensions: int = 128) -> Tuple[np.ndarray, PCA]:
-    """
-    Create a PCA-based index for fast approximate lookup.
-    
-    Args:
-        vectors: Original high-dimensional vectors
-        target_dimensions: Target dimensionality after reduction
-        
-    Returns:
-        Tuple of (reduced vectors, fitted PCA model)
-    """
-    # Initialize and fit PCA model
-    pca = PCA(n_components=target_dimensions)
-    reduced_vectors = pca.fit_transform(vectors)
-    
-    return reduced_vectors, pca
+OptimizePCAIndex(embeddings, target_dimensions=128, variance_threshold=0.9):
+  // Compute PCA
+  pca_model ← FitPCA(embeddings, n_components=target_dimensions)
+  
+  // Check explained variance
+  variance_ratio ← pca_model.explained_variance_ratio
+  cumulative_variance ← Sum(variance_ratio)
+  
+  // Adjust dimensions if needed
+  if cumulative_variance < variance_threshold:
+    target_dimensions ← FindMinDimensionsForVariance(variance_ratio, variance_threshold)
+    pca_model ← FitPCA(embeddings, n_components=target_dimensions)
+  
+  // Transform embeddings to reduced space
+  reduced_embeddings ← pca_model.transform(embeddings)
+  
+  return {
+    pca_model,
+    reduced_embeddings,
+    variance_preserved: cumulative_variance,
+    dimensions: target_dimensions
+  }
 ```
 
-The PCA-based indexing provides significant performance advantages:
-- **Memory Efficiency:** Reduced storage requirements (up to 87.5% reduction for 1024→128 dimensions)
-- **Search Speed:** Logarithmic rather than linear time complexity for initial candidate retrieval
-- **Scalability:** Better performance with growing vector collections
-- **Cache Efficiency:** Improved CPU cache utilization with smaller vector footprints
+### 2.3 Recursive Agent Operations
 
-### 2.4 Data Storage and Query Layer
-- **Primary Storage:**
-  - Utilize pandas DataFrames for lightweight, in-memory storage of embeddings, metadata (e.g., backlinks, usage frequency), and processed blocks.
-- **Persistence Strategy:**
-  - Implement hybrid persistence using both Parquet and Arrow formats:
-    - **Parquet Files:** For long-term storage of large datasets with efficient compression.
-    - **Arrow Files:** For high-performance data interchange and memory-mapping capabilities.
-  - Automatically select optimal format based on data characteristics and usage patterns.
-- **Pandas Query Engine:**
-  - Interpret natural language queries, map them to DataFrame operations, and execute complex filtering/join queries to retrieve relevant blocks.
+The Recursive Agent Operations system orchestrates a team of specialized AI agents that continuously refine and enhance the knowledge base. Each agent performs specific tasks such as expanding content with additional context, merging related information, splitting mixed content, or pruning irrelevant details. The system coordinates these agents based on the current cognitive state, prioritizing operations according to available energy and system needs. This creates a self-improving knowledge ecosystem that becomes more valuable over time.
+
+```
+Algorithm: AgentCoordinator
+
+CoordinateAgents(cognitive_system, document_store, agents):
+  // Get system state
+  system_state ← cognitive_system.GetSystemState()
+  energy_level ← cognitive_system.GetEnergyLevel()
+  optimization_level ← cognitive_system.GetOptimizationLevel()
+  
+  // Prioritize agents based on state
+  agent_queue ← PrioritizeAgentsByState(agents, system_state)
+  
+  // Execute with energy awareness
+  results ← []
+  for each agent in agent_queue:
+    // Check energy requirements
+    required_energy ← agent.GetEnergyRequirement()
+    if energy_level < required_energy and agent.priority ≠ "critical":
+      DeferAgentOperation(agent)
+      continue
+    
+    // Execute agent
+    agent.SetOptimizationLevel(optimization_level)
+    cognitive_system.RecordOperationStart(agent.type)
+    agent_result ← agent.Execute(document_store)
+    cognitive_system.RecordOperationComplete(agent.type)
+    
+    results.append(agent_result)
+  
+  return results
+```
 
 #### 2.4.1 Vector Database System
 
-The Vector Database system provides efficient storage and retrieval of embeddings for RAG functionality:
+The Vector Database system provides specialized storage and retrieval capabilities for embedding vectors and their associated content. Unlike traditional databases, the Vector Database is optimized for similarity-based operations rather than exact matching. It implements a two-tier architecture with fast approximate search followed by precise reranking, along with support for metadata filtering, chunking, and deduplication. This specialized storage layer is critical for efficient RAG operations, as it enables rapid content retrieval based on semantic similarity.
 
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
+```
+Algorithm: VectorDatabaseSystem
+
+AddDocument(doc_id, chunks, embeddings, metadata):
+  for i from 0 to |chunks|-1:
+    chunk_id ← GenerateChunkID(doc_id, i)
+    
+    // Check for duplicates
+    if EnableDeduplication and IsNearDuplicate(embeddings[i]):
+      continue
+    
+    // Add to storage
+    storage.Add({
+      "doc_id": doc_id,
+      "chunk_id": chunk_id,
+      "text": chunks[i],
+      "embedding": embeddings[i],
+      "metadata": metadata,
+      "timestamp": current_time()
+    })
+    
+    // Add to search index
+    search_index.Add(chunk_id, embeddings[i])
+  
+  UpdateDatabaseStatistics()
+  
+  return {
+    "doc_id": doc_id,
+    "chunks_added": |chunks|,
+    "total_chunks": GetTotalChunks()
+  }
+
+Search(query_embedding, top_k=5, threshold=0.6, filters=null):
+  // First pass - use fast index
+  candidates ← search_index.Search(query_embedding, k=top_k*2)
+  
+  // Apply filtering
+  if filters:
+    candidates ← ApplyFilters(candidates, filters)
+  
+  // Second pass - re-rank with full vectors
+  results ← []
+  for each candidate in candidates:
+    full_vector ← storage.GetEmbedding(candidate.id)
+    similarity ← CosineSimilarity(query_embedding, full_vector)
+    
+    if similarity ≥ threshold:
+      chunk ← storage.GetChunk(candidate.id)
+      results.append({
+        "chunk_id": candidate.id,
+        "doc_id": chunk.doc_id,
+        "text": chunk.text,
+        "similarity": similarity,
+        "metadata": chunk.metadata
+      })
+  
+  // Sort and return top results
+  Sort results by similarity (descending)
+  return first top_k items from results
+```
+
+### 2.5 API & Concurrency
+
+The API & Concurrency system provides external access to the RAG engine's capabilities through well-defined interfaces while managing concurrent requests efficiently. It implements a RESTful API for document management, querying, and system statistics, along with WebSocket connections for real-time monitoring. The system handles multiple simultaneous requests through a combination of thread pooling, asynchronous processing, and prioritization mechanisms. This approach ensures responsive performance even under high load while preventing resource contention.
+
+```
+Algorithm: APILayer
+
+// Core API endpoints
+Endpoints:
+  POST /documents/add:
+    // Add document to knowledge base
+    Input: {document_text, metadata, chunking_strategy}
+    Output: {document_id, chunks_processed, status}
+  
+  POST /query:
+    // Perform RAG query
+    Input: {query_text, top_k, threshold, filters, include_citations}
+    Output: {answers, context_chunks, citations, metadata}
+  
+  GET /documents/{doc_id}:
+    // Retrieve document
+    Output: {document_text, metadata, chunks, statistics}
+  
+  DELETE /documents/{doc_id}:
+    // Remove document
+    Output: {status, chunks_removed}
+  
+  GET /system/stats:
+    // Get system statistics
+    Output: {document_count, chunk_count, embedding_stats, memory_usage}
+  
+  WS /system/monitor:
+    // Real-time monitoring
+    Events: {system_state_updates, query_processing, cognitive_state}
+```
+
+### 2.6 Visualization Module
+
+The Visualization Module provides interactive graphical representations of the system's knowledge structures and operations. It renders complex graph data in an intuitive interface where users can explore relationships between concepts, observe clustering patterns, and track how queries traverse the knowledge base. The system supports zooming, panning, node selection, and highlighting of related content. This visual layer makes the abstract knowledge structures tangible and provides insights into the system's reasoning process that would be difficult to gain from text alone.
+
+```
+Algorithm: GraphVisualizer
+
+Initialize(config):
+  width ← config.width or 1200
+  height ← config.height or 800
+  scale ← 1.0
+  offset_x, offset_y ← 0, 0
+  node_positions ← {}
+  selected_node ← null
+  highlight_paths ← []
+  view_mode ← "combined"
+  
+  // Initialize backend
+  if config.backend = "pygame": InitializePygameBackend()
+  else if config.backend = "web": InitializeWebBackend()
+  else: InitializeDefaultBackend()
+
+RenderGraph(graph_data):
+  // Calculate positions if needed
+  if node_positions is empty:
+    node_positions ← CalculateForceDirectedLayout(graph_data)
+  
+  // Draw edges
+  for each edge in graph_data.edges:
+    source_pos ← TransformToViewport(node_positions[edge.source_id])
+    target_pos ← TransformToViewport(node_positions[edge.target_id])
+    
+    edge_color ← GetEdgeColor(edge)
+    edge_width ← GetEdgeWidth(edge)
+    
+    if edge in highlight_paths:
+      edge_color ← HIGHLIGHT_COLOR
+      edge_width ← edge_width * 2
+    
+    DrawLine(source_pos, target_pos, edge_color, edge_width)
+  
+  // Draw nodes
+  for each node in graph_data.nodes:
+    pos ← TransformToViewport(node_positions[node.id])
+    node_color ← GetNodeColor(node)
+    node_size ← GetNodeSize(node)
+    
+    if node.id = selected_node:
+      node_color ← SELECTED_COLOR
+      node_size ← node_size * 1.2
+    else if NodeInHighlightedPath(node.id):
+      node_color ← HIGHLIGHT_COLOR
+    
+    DrawNode(pos, node_size, node_color)
+    
+    // Draw labels if zoomed in enough
+    if scale > 0.7:
+      DrawNodeLabel(pos, node.label or node.id, GetLabelColor(node))
+  
+  // Draw UI elements and update screen
+  DrawUserInterface()
+  UpdateDisplay()
+
+HandleInteraction(event):
+  if event.type = MOUSE_CLICK:
+    clicked_node ← FindNodeAtPosition(event.position)
+    if clicked_node: SelectNode(clicked_node)
+    else: ClearSelection()
+  
+  else if event.type = MOUSE_DRAG:
+    if event.button = LEFT:  // Pan view
+      offset_x += event.delta_x
+      offset_y += event.delta_y
+    else if event.button = RIGHT and selected_node:  // Move node
+      node_positions[selected_node] ← ScreenToGraphCoordinates(event.position)
+  
+  else if event.type = MOUSE_WHEEL:  // Zoom
+    old_scale ← scale
+    scale ← Clamp(scale * (1 + event.delta * 0.1), 0.1, 5.0)
+    
+    // Zoom toward mouse position
+    scale_factor ← scale / old_scale
+    offset_x ← event.position.x - (event.position.x - offset_x) * scale_factor
+    offset_y ← event.position.y - (event.position.y - offset_y) * scale_factor
+```
+
+### 2.7 Resource Collection System
+
+The Resource Collection System manages the acquisition and preprocessing of content from various sources. It employs specialized extractors for different source types (web pages, files, databases, APIs) and parsers for different content formats (plain text, HTML, PDF, JSON, markdown). The system operates in a parallel, queue-based architecture that can process content asynchronously while respecting rate limits and source constraints. This modular approach allows the system to ingest content from virtually any source while abstracting away the complexity of different formats and access methods.
+
+```
+Algorithm: ResourceCollector
+
+Initialize(config):
+  // Setup processing pool
+  max_workers ← config.max_workers or 4
+  processing_thread_pool ← new ThreadPool(max_workers)
+  
+  // Register extractors and parsers
+  RegisterExtractor("web", WebExtractor)
+  RegisterExtractor("file", FileSystemExtractor)
+  RegisterExtractor("database", DatabaseExtractor)
+  RegisterExtractor("api", APIExtractor)
+  
+  RegisterParser("text/plain", TextParser)
+  RegisterParser("text/html", HTMLParser)
+  RegisterParser("application/pdf", PDFParser)
+  RegisterParser("application/json", JSONParser)
+  RegisterParser("text/markdown", MarkdownParser)
+  
+  // Initialize processing queue
+  document_queue ← new ThreadSafeQueue()
+  processed_documents ← new ConcurrentSet()
+  
+  // Start background processing if configured
+  if config.auto_process:
+    StartBackgroundProcessing()
+
+CollectFromSource(source):
+  // Get appropriate extractor
+  source_type ← DetectSourceType(source)
+  extractor ← extractor_registry[source_type]
+  
+  if not extractor:
+    throw Exception("Unsupported source type: " + source_type)
+  
+  // Apply rate limiting if needed
+  if source.domain in rate_limiters:
+    rate_limiters[source.domain].Acquire()
+  
+  // Extract and queue documents
+  raw_documents ← extractor.Extract(source)
+  
+  for each doc in raw_documents:
+    if doc.id not in processed_documents:
+      document_queue.Enqueue(doc)
+      processed_documents.Add(doc.id)
+  
+  return {
+    queued_documents: |raw_documents|,
+    source_type: source_type
+  }
+
+ProcessDocument(raw_document):
+  // Parse document
+  content_type ← DetectContentType(raw_document)
+  parser ← parser_registry[content_type]
+  
+  if not parser:
+    Log warning("No parser for content type: " + content_type)
+    return null
+  
+  // Process document
+  parsed_document ← parser.Parse(raw_document)
+  metadata ← ExtractMetadata(parsed_document)
+  normalized_text ← NormalizeText(parsed_document.text)
+  
+  return {
+    id: raw_document.id,
+    text: normalized_text,
+    metadata: metadata,
+    content_type: content_type,
+    source: raw_document.source,
+    timestamp: current_time()
+  }
+```
+
+### 2.8 Performance Monitoring
+
+The Performance Monitoring system tracks key metrics across all components to ensure optimal operation and identify bottlenecks. It collects data on system-level resources (CPU, memory, disk, network) as well as component-specific metrics (query latency, cache hit rates, embedding generation time). The collected metrics are stored in a time-series database for historical analysis and visualized through dashboards. The system also implements alerting based on configurable thresholds to proactively identify performance issues before they impact users.
+
+```
+Algorithm: PerformanceMonitor
+
+Initialize(config, components):
+  // Setup monitoring config
+  collection_interval ← config.interval or 60
+  retention_period ← config.retention_period or 604800  // 7 days
+  alert_thresholds ← config.thresholds or DefaultThresholds()
+  
+  // Initialize storage
+  metrics_store ← new TimeSeriesDatabase(config.storage_path, retention_period)
+  
+  // Register metrics and hooks
+  RegisterSystemMetrics()
+  RegisterComponentMetrics(components)
+  
+  for each component in components:
+    InstallMonitoringHooks(component.name, component)
+  
+  // Start collection if configured
+  if config.auto_collect:
+    StartMetricsCollection()
+
+CollectMetricsLoop():
+  while not shutdown_requested:
+    // Collect metrics
+    metrics_batch ← CollectMetrics()
+    
+    // Store metrics
+    metrics_store.Store(metrics_batch)
+    
+    // Check for alerts
+    alerts ← CheckAlertConditions(metrics_batch)
+    if alerts:
+      EmitAlerts(alerts)
+    
+    // Sleep until next interval
+    elapsed ← current_time() - collection_start
+    sleep_time ← max(0, collection_interval - elapsed)
+    Sleep(sleep_time)
+
+CollectMetrics():
+  timestamp ← current_time()
+  metrics ← {}
+  
+  // System metrics
+  metrics["system"] ← {
+    cpu_percent: GetCPUUsage(),
+    memory_used: GetMemoryUsage(),
+    disk_io: GetDiskIO(),
+    network_io: GetNetworkIO(),
+    thread_count: GetThreadCount()
+  }
+  
+  // Component metrics
+  for each component_name, hooks in component_hooks:
+    component_metrics ← {}
+    
+    for each metric_name, collector_func in hooks:
+      try:
+        metric_value ← collector_func()
+        component_metrics[metric_name] ← metric_value
+      catch Exception as e:
+        Log error("Error collecting " + component_name + "." + metric_name)
+    
+    metrics[component_name] ← component_metrics
+  
+  return {timestamp, metrics}
+```
+
+### 2.9 Multi-Level Caching System
+
+The Multi-Level Caching System optimizes data access patterns through a hierarchical caching architecture. It implements multiple cache tiers (memory, disk, distributed) with different performance characteristics and capacities, automatically promoting frequently accessed data to faster tiers. The system employs intelligent eviction policies based on usage patterns and configurable TTL values for different data types. This layered approach dramatically reduces computation and database access by storing calculated results at optimal cache levels, significantly improving overall system responsiveness.
+
+```
+Algorithm: MultiLevelCache
+
+Initialize(config):
+  // Configure cache levels
+  for each level_config in config.levels:
+    level_name ← level_config.name
+    level_type ← level_config.type
+    
+    // Create appropriate implementation
+    if level_type = "memory": cache_levels[level_name] ← new MemoryCache(level_config)
+    else if level_type = "disk": cache_levels[level_name] ← new DiskCache(level_config)
+    else if level_type = "redis": cache_levels[level_name] ← new RedisCache(level_config)
+    
+    // Store configuration
+    default_ttl[level_name] ← level_config.ttl
+    max_size[level_name] ← level_config.max_size
+    eviction_policy[level_name] ← level_config.eviction_policy
+
+Get(key, context=null):
+  // Try each cache level in order
+  for each level_name in cache_levels:
+    cache_result ← cache_levels[level_name].Get(key)
+    
+    if cache_result:
+      // Record hit and promote to higher levels
+      metrics.RecordHit(level_name, context)
+      PromoteToHigherLevels(key, cache_result, level_name)
+      return cache_result
+  
+  // Record miss
+  metrics.RecordMiss(context)
+  return null
+
+Set(key, value, ttl=null, levels=null):
+  // Set in specified or all levels
+  target_levels ← levels or keys(cache_levels)
+  
+  for each level_name in target_levels:
+    if level_name in cache_levels:
+      level_ttl ← ttl or default_ttl[level_name]
+      cache_levels[level_name].Set(key, value, level_ttl)
+  
+  return true
+```
+
+### 2.10 Design Patterns
+
+#### 2.10.1 Singleton Pattern
+
+The Singleton Pattern ensures that classes with global access requirements are instantiated only once throughout the application lifecycle. This pattern is crucial for components that manage shared resources, maintain global state, or provide centralized coordination. The implementation uses thread-safe double-checking to prevent race conditions in concurrent environments. By restricting instantiation, the Singleton pattern prevents resource conflicts, reduces memory usage, and ensures consistent system behavior.
+
+```
+Algorithm: Singleton
+
+// Static instance variable
+static instance ← null
+
+// Get instance method
+GetInstance():
+  if instance is null:
+    // Use double-checking lock pattern
+    Acquire lock
+    if instance is still null:
+      instance ← new Singleton()
+    Release lock
+  
+  return instance
+```
+
+#### 2.10.2 Factory Pattern
+
+The Factory Pattern provides a flexible mechanism for creating objects without specifying their concrete classes. It implements a registration system where creator functions are mapped to type identifiers, allowing new types to be added without modifying existing code. This pattern is essential for the system's extensibility, as it enables the addition of new agent types, parsers, extractors, and other components through configuration rather than code changes. The factory approach decouples object creation from usage, promoting modular design and testability.
+
+```
+Algorithm: Factory
+
+// Registry of creators
+registry ← empty Dictionary
+
+Register(type_id, creator_function):
+  registry[type_id] ← creator_function
+
+Create(type_id, parameters):
+  if type_id not in registry:
+    throw Exception("Unknown type: " + type_id)
+  
+  creator ← registry[type_id]
+  return creator(parameters)
+```
+
+### 2.11 Agentic Framework
+
+The Agentic Framework provides the foundation for autonomous, specialized components that perform specific tasks within the RAG system. Each agent implements a common interface while specializing in particular operations such as content expansion, merging, splitting, or pruning. The framework includes energy awareness, where agents adapt their behavior based on available computational resources, and prioritization mechanisms to ensure critical operations are performed even in resource-constrained states. This design enables the system to continuously improve its knowledge base through coordinated agent operations.
+
+```
+Algorithm: BaseAgent
+
+// Base properties
+agent_type      // Type identifier
+priority        // Priority level
+energy_cost     // Energy consumption
+
+Execute(context):
+  // Abstract method to be implemented by specific agents
+  NotImplementedError()
+
+GetEnergyRequirement():
+  return energy_cost
+
+SetOptimizationLevel(level):
+  // Adjust agent behavior based on optimization level
+  if level = 0:  // No optimization
+    // Use full capabilities
+  else if level ≥ 3:  // High optimization
+    // Use minimal operation
+```
+
+```
+Algorithm: AgentCollaboration
+
+OrchestrateAgents(agents, cognitive_system, context):
+  // Get system state
+  state ← cognitive_system.GetSystemState()
+  energy ← cognitive_system.GetEnergyLevel()
+  sleep_stage ← cognitive_system.GetSleepStage()
+  
+  // Determine execution strategy
+  if sleep_stage ≠ "AWAKE":
+    selected_agents ← FilterMaintenanceAgents(agents)
+  else if state = "PROTECTIVE":
+    selected_agents ← FilterCriticalAgents(agents)
+  else:
+    selected_agents ← PrioritizeAgentsByState(agents, state)
+  
+  // Execute agents with energy awareness
+  result ← context
+  for each agent in selected_agents:
+    if agent.GetEnergyRequirement() ≤ energy or agent.priority = "critical":
+      cognitive_system.RecordOperationStart(agent.type)
+      result ← agent.Execute(result)
+      cognitive_system.RecordOperationComplete(agent.type)
+  
+  return result
+```
+
+### 2.12 Data Acquisition System
+
+The Data Acquisition System manages the process of collecting, extracting, and normalizing content from diverse sources. It implements a configurable pipeline architecture where each stage performs specific transformations such as text normalization, metadata extraction, chunking, and entity recognition. The system includes specialized components for web crawling with respect for robots.txt and rate limits, and multimodal processing to handle images, audio, video, and structured data. This comprehensive approach enables the RAG system to ingest knowledge from virtually any source in a controlled, efficient manner.
+
+```
+Algorithm: ProcessingPipeline
+
+Initialize(config):
+  // Configure pipeline
+  for each stage_config in config.stages:
+    processor ← CreateProcessor(stage_config.type, stage_config.config)
+    processors[stage_config.name] ← processor
+    stages.append(stage_config.name)
+
+ProcessDocument(document):
+  current_doc ← document
+  stage_results ← {}
+  
+  // Process through each stage
+  for each stage_name in stages:
+    processor ← processors[stage_name]
+    
+    try:
+      start_time ← current_time()
+      result ← processor.Process(current_doc)
+      current_doc ← result.document
+      stage_results[stage_name] ← result.metadata
+      
+      // Record metrics
+      elapsed ← current_time() - start_time
+      metrics.RecordStageTime(stage_name, elapsed)
+    catch Exception as e:
+      metrics.RecordError(stage_name, e)
+      return {
+        success: false,
+        error: e.message,
+        stage: stage_name,
+        partial_results: stage_results
+      }
+  
+  return {
+    success: true,
+    document: current_doc,
+    stage_results: stage_results
+  }
+```
+
+```
+Algorithm: WebCrawler
+
+Initialize(config):
+  // Configure crawler
+  politeness_delay ← config.politeness_delay or 2.0
+  max_urls_per_domain ← config.max_urls_per_domain or 100
+  max_depth ← config.max_depth or 3
+  respect_robots ← config.respect_robots or true
+  
+  // Initialize data structures
+  urls_queue ← new PriorityQueue()
+  visited_urls ← new Set()
+  url_fingerprints ← {}
+  robots_cache ← {}
+
+EnqueueURL(url, depth, source):
+  // Don't exceed max depth
+  if depth > max_depth: return false
+  
+  // Skip if already visited
+  normalized_url ← NormalizeURL(url)
+  if normalized_url in visited_urls: return false
+  
+  // Check domain limits
+  domain ← ExtractDomain(normalized_url)
+  if domain_url_counts[domain] ≥ max_urls_per_domain: return false
+  
+  // Check robots.txt
+  if respect_robots and not IsAllowedByRobots(normalized_url): return false
+  
+  // Add to queue
+  job ← {url: normalized_url, depth, priority: CalculatePriority(url, depth, source)}
+  urls_queue.Enqueue(job, job.priority)
+  
+  return true
+
+CrawlNext():
+  // Get next URL
+  if urls_queue.IsEmpty(): return null
+  
+  job ← urls_queue.Dequeue()
+  url ← job.url
+  
+  // Mark as visited and apply rate limiting
+  visited_urls.Add(url)
+  domain ← ExtractDomain(url)
+  rate_limiters[domain].Acquire()
+  
+  // Fetch content
+  fetch_result ← FetchURL(url)
+  if not fetch_result.success: return {success: false, error: fetch_result.error}
+  
+  // Check for content change
+  content_hash ← CalculateHash(fetch_result.content)
+  if url in url_fingerprints and content_hash = url_fingerprints[url]:
+    return {success: true, changed: false}
+  
+  url_fingerprints[url] ← content_hash
+  
+  // Extract content and links
+  content ← ExtractContent(url, fetch_result.content)
+  links ← ExtractLinks(url, fetch_result.content)
+  
+  // Enqueue links
+  for each link in links:
+    EnqueueURL(link, job.depth + 1, url)
+  
+  return {
+    success: true,
+    changed: true,
+    content: content,
+    links_found: |links|
+  }
+```
+
+```
+Algorithm: MultimodalHandler
+
+Initialize(config):
+  // Register content processors
+  RegisterProcessor("image/*", ImageProcessor)
+  RegisterProcessor("audio/*", AudioProcessor)
+  RegisterProcessor("video/*", VideoProcessor)
+  RegisterProcessor("application/pdf", PDFProcessor)
+  RegisterProcessor("text/html", HTMLProcessor)
+
+ProcessContent(content, content_type):
+  // Find appropriate processor
+  processor ← FindMatchingProcessor(content_type)
+  
+  if not processor:
+    throw Exception("No processor for content type: " + content_type)
+  
+  // Process the content
+  result ← processor.Process(content, config)
+  
+  return {
+    text: result.text,
+    metadata: result.metadata,
+    confidence: result.confidence
+  }
+```
+
+### 2.13 Cognitive System Integration (CRAG)
+
+The Cognitive System Integration (CRAG) embeds biologically-inspired self-regulation mechanisms into the RAG architecture. It implements energy and entropy tracking to model computational resource availability, sleep cycles for system maintenance and optimization, and a dual-graph memory architecture that combines associative and structured knowledge representation. This biomimetic approach enables the system to adapt to varying workloads, prioritize operations based on resource availability, and continuously optimize its knowledge structures through scheduled maintenance periods.
+
+```
+Algorithm: CognitiveIntegration
+
+IntegrateCognitiveFunctions(rag_engine, cognitive_system):
+  // 1. Connect operation tracking
+  rag_engine.SetOperationTracker(cognitive_system.RecordOperation)
+  
+  // 2. Add state-based parameter adaptation
+  rag_engine.SetParameterAdjuster(cognitive_system.AdjustParameterForState)
+  
+  // 3. Integrate memory structures with vector database
+  vector_db ← rag_engine.GetVectorDatabase()
+  memory_graph ← cognitive_system.GetMemoryGraph()
+  experience_graph ← cognitive_system.GetExperienceGraph()
+  
+  ConnectVectorDBWithMemoryGraphs(vector_db, memory_graph, experience_graph)
+  
+  // 4. Setup sleep cycle maintenance operations
+  maintenance_manager ← rag_engine.GetMaintenanceManager()
+  cognitive_system.RegisterMaintenanceOperations(maintenance_manager.GetOperations())
+  
+  // 5. Add cognitive API endpoints
+  api_server ← rag_engine.GetAPIServer()
+  cognitive_api ← cognitive_system.GetAPIEndpoints()
+  api_server.RegisterEndpoints(cognitive_api)
+  
+  return {status: "integrated", components: [
+    "energy_tracking", "entropy_management", 
+    "sleep_cycles", "memory_graph", "experience_graph"
+  ]}
+```
+
+##### 2.13.3.1 Memory Graph
+
+The Memory Graph provides structured knowledge representation through a semantic network of entities and typed relationships. Unlike vector embeddings that capture similarity through proximity in vector space, the Memory Graph explicitly models knowledge as triples (subject-predicate-object) with defined relationship types. It supports operations such as entity and relationship management, path-based querying, and logical inference. This explicit representation enables precise factual recall, ontological reasoning, and structured knowledge extraction that complements the pattern-matching strengths of vector embeddings.
+
+```
+Algorithm: MemoryGraph
+
+Initialize(ontology_schema, relation_types):
+  // Core storage structures
+  entities ← {}
+  relationships ← {}
+  
+  // Index structures
+  entity_type_index ← {}
+  relationship_type_index ← {}
+  
+  // Load schemas
+  if ontology_schema: LoadOntologySchema(ontology_schema)
+  if relation_types: LoadRelationTypes(relation_types)
+  else:
+    // Default relation types
+    relation_types ← {
+      "is_a": {transitive: true, symmetric: false, inverse: "has_instance"},
+      "has_part": {transitive: true, symmetric: false, inverse: "part_of"},
+      "related_to": {transitive: false, symmetric: true, inverse: "related_to"}
+      // ...other default relations...
     }
-}}%%
 
-flowchart TD
-    %% Vector Database System - optimized layout without subgraphs
-    classDef data stroke:#fff,stroke-width:1px,stroke-dasharray:3 3,color:#fff
-    classDef dataFlow stroke:#fff,stroke-width:1px,stroke-dasharray:5 5,color:#fff
-    classDef storage stroke:#fff,stroke-width:2px,color:#fff
-    classDef index stroke:#fff,stroke-width:2px,stroke-dasharray:10 5,color:#fff
+AddEntity(type, name, properties):
+  entity_id ← GenerateEntityID(type, name)
+  
+  if entity_id in entities:
+    return {success: false, message: "Entity already exists"}
+  
+  // Create entity node
+  entity ← {
+    id: entity_id,
+    type: type,
+    name: name,
+    properties: {},
+    created_at: current_time()
+  }
+  
+  // Add to storage and indices
+  entities[entity_id] ← entity
+  if type not in entity_type_index:
+    entity_type_index[type] ← {}
+  entity_type_index[type].Add(entity_id)
+  
+  // Add properties
+  if properties:
+    for each property_name, value in properties:
+      property_id ← AddProperty(entity_id, property_name, value)
+      entity.properties[property_name] ← property_id
+  
+  return {success: true, entity_id}
 
-    %% Input flow
-    Input[Document Text] -->|Chunking| Chunks
-    Chunks[Text Chunks] -->|Embedding| Vectors
-    Vectors[Vector Embeddings] -->|Add to DB| DataFrame
-    Vectors -->|Dimensionality Reduction| ReducedVectors[PCA Reduced Vectors]
-    ReducedVectors -->|Index Building| FastIndex
+AddRelationship(source_id, relation_type, target_id, weight=1.0):
+  // Validate inputs
+  if source_id not in entities or target_id not in entities:
+    return {success: false, message: "Entity not found"}
+  
+  if relation_type not in relation_types:
+    return {success: false, message: "Unknown relation type"}
+  
+  // Create relationship
+  relationship_id ← GenerateRelationshipID(source_id, relation_type, target_id)
+  
+  if relationship_id in relationships:
+    return {success: false, message: "Relationship already exists"}
+  
+  // Store relationship
+  relationship ← {
+    id: relationship_id,
+    source_id: source_id,
+    target_id: target_id,
+    type: relation_type,
+    weight: weight,
+    created_at: current_time()
+  }
+  
+  relationships[relationship_id] ← relationship
+  
+  // Update indices
+  UpdateRelationshipIndices(relationship)
+  
+  // Handle inverse relationship if defined
+  if relation_types[relation_type].inverse:
+    inverse_type ← relation_types[relation_type].inverse
+    AddRelationship(target_id, inverse_type, source_id, weight)
+  
+  return {success: true, relationship_id}
+
+Query(start_entity, relation_path, max_depth):
+  // Graph traversal query
+  if start_entity not in entities: return []
+  
+  results ← []
+  visited ← {start_entity}
+  queue ← [{entity: start_entity, depth: 0, path: []}]
+  
+  while queue is not empty and queue[0].depth < max_depth:
+    current ← queue.Dequeue()
+    entity_id ← current.entity
     
-    %% Database components
-    DataFrame[In-Memory DataFrame]:::data
-    DocTable[Document Metadata]:::storage
-    ChunkTable[Chunk Data]:::storage
-    VectorTable[Vector Data]:::storage
-    FastIndex[Fast Index Table]:::index
-    
-    %% Query components
-    QueryVector[Query Vector] -->|Dimension Reduction| ReducedQuery[Reduced Query Vector]
-    ReducedQuery -->|First-pass Search| CandidateSet[Candidate Set]
-    CandidateSet -->|Full-dimension Refinement| Ranking
-    QueryVector -.->|Optional Direct Search| Search
-    Search[Full Vector Search]:::dataFlow --> Filter
-    Filter[Source Filter]:::dataFlow --> Ranking
-    Ranking[Result Ranking]:::dataFlow --> Results
-    Results[Ranked Results]
-    
-    %% Connections between components
-    DataFrame <--> DocTable <-->|References| ChunkTable
-    ChunkTable <-->|References| VectorTable
-    DataFrame <--> Search
-    VectorTable -.->|Builds| FastIndex
-    FastIndex --> CandidateSet
+    // Get related entities
+    for each relation_type, targets in outgoing_edges[entity_id]:
+      if relation_path is null or relation_type in relation_path:
+        for each target_id in targets:
+          if target_id not in visited:
+            visited.Add(target_id)
+            results.append({
+              entity_id: target_id,
+              path_length: current.depth + 1,
+              relation_path: relation_type
+            })
+            queue.Enqueue({
+              entity: target_id,
+              depth: current.depth + 1,
+              path: current.path + [relation_type]
+            })
+  
+  return results
 ```
 
-**Core Features:**
+##### 2.13.3.3 Dual-Graph Integration
 
-- **Document Management:** Add, retrieve, and remove document chunks with automatic deduplication
-- **Vector Search:** Efficient cosine similarity search with configurable threshold and ranking
-- **PCA-Optimized Indexing:** Fast approximate search using dimensionality reduction and specialized index structures
-- **Two-Tier Search:** Rapid candidate selection with reduced dimensions followed by precision ranking with full vectors
-- **Source Filtering:** Filter results by document source or metadata attributes
-- **Metadata Support:** Store and retrieve arbitrary metadata associated with documents
-- **Statistics and Monitoring:** Track database metrics including document count, chunk statistics, and embedding dimension information
+The Dual-Graph Integration system combines the complementary strengths of vector-based similarity search and structured knowledge representation. It enhances retrieval by leveraging both the Experience Graph's associative pattern matching and the Memory Graph's explicit semantic relationships. When processing a query, the system extracts relevant entities, retrieves related knowledge from both graphs, and combines the results based on relevance to the query. This integrated approach provides more comprehensive and contextually relevant information than either system could deliver independently.
 
-The VectorDatabase integrates with the broader RAG system:
-- Coordinated by RAGEngine for document processing and retrieval
-- Receives vectors from EmbeddingGenerator
-- Works with TextChunker for document preparation
-- Provides results to ContextAssembler for prompt enhancement
+```
+Algorithm: EnhancedDualGraphRetrieval
 
-**Implementation Example:**
-```python
-# Using the VectorDatabase with PCA optimization
-db = VectorDatabase(use_pca_optimization=True, pca_dimensions=128)
-
-# Add document chunks with metadata
-chunk_ids = db.add_document(
-    text_chunks=["Content chunk 1", "Content chunk 2"],
-    vectors=[[0.1, 0.2, ...], [0.3, 0.4, ...]],  # Original high-dim vectors
-    metadata={"source": "documentation"},
-    source="guide.md"
-)
-
-# Search with tiered approach (PCA first, then full vector refinement)
-results = db.search(
-    query_vector=[0.15, 0.25, ...],
-    top_k=3,
-    threshold=0.7,
-    source_filter=["documentation"],
-    use_fast_index=True  # Enables PCA-based fast indexing
-)
+EnhancedDualGraphRetrieval(query_text, top_k):
+  query_embedding ← embedding_generator.EmbedText(query_text)
+  
+  // 1. Get vector database matches
+  vector_results ← vector_db.Search(
+    query_embedding, top_k, threshold=0.6
+  )
+  
+  // 2. Get experience graph matches
+  experience_results ← []
+  if HasExperienceGraph():
+    experience_results ← experience_graph.RetrieveRelevantMemories(
+      query_embedding, top_k, ["abstraction", "cluster", "chunk"]
+    )
+  
+  // 3. Query memory graph with extracted entities
+  entities ← ExtractEntities(query_text)
+  memory_results ← []
+  
+  if HasMemoryGraph() and entities:
+    for each entity in entities:
+      entity_results ← memory_graph.Query(entity, null, 2)
+      memory_results.extend(entity_results)
+  
+  // 4. Combine and rank results
+  combined_results ← MergeAndRankResults(
+    vector_results,
+    experience_results,
+    memory_results,
+    query_embedding
+  )
+  
+  return First top_k items from combined_results
 ```
 
-#### 2.4.2 Database Schema
+### 2.15 Error Handling & Recovery
 
-The in-memory database structure for vector storage includes:
+The Error Handling & Recovery system provides robust mechanisms for detecting, classifying, and responding to errors throughout the architecture. It implements a comprehensive classification taxonomy, configurable retry policies with exponential backoff, circuit breakers to prevent cascading failures, and context-aware recovery strategies. The system is tightly integrated with the cognitive framework, adjusting its behavior based on the current energy state and deferring non-critical recovery to appropriate sleep cycles. This approach ensures system resilience even under adverse conditions while preserving critical functionality.
 
-| Field | Type | Description |
-|-------|------|-------------| 
-| `doc_id` | String | Unique document identifier |
-| `chunk_id` | String | Unique chunk identifier |
-| `text` | String | Original text content |
-| `source` | String | Document source identifier |
-| `metadata` | JSON | Encoded metadata for the chunk |
-| `embedding` | Array | Full vector embedding as numpy array |
-| `reduced_embedding` | Array | PCA-reduced vector for fast indexing |
-| `timestamp` | DateTime | When the entry was created |
+```
+Algorithm: ErrorHandler
 
-This structure ensures:
-- Efficient storage and retrieval of vector embeddings
-- Linkage between documents, chunks, and their embeddings
-- Fast approximate search capabilities through dimensionality reduction
-- Comprehensive metadata for filtering and context enrichment
-- Performance optimization through in-memory operations
+Initialize():
+  // Register standard error types
+  RegisterErrorType("connection", {
+    retryable: true,
+    max_retries: 3,
+    backoff_factor: 2.0,
+    circuit_breaker: true
+  })
+  
+  RegisterErrorType("timeout", {
+    retryable: true,
+    max_retries: 2,
+    backoff_factor: 1.5,
+    circuit_breaker: true
+  })
+  
+  RegisterErrorType("resource_not_found", {
+    retryable: false,
+    log_level: "warning"
+  })
+  
+  // Create circuit breakers
+  for each component in application_components:
+    circuit_breakers[component.name] ← new CircuitBreaker(
+      failure_threshold: 5,
+      reset_timeout: 30,
+      half_open_requests: 1
+    )
 
+HandleError(error, context):
+  // Classify error
+  error_type ← ClassifyError(error)
+  error_config ← error_registry[error_type]
+  
+  // Track and log error
+  IncrementErrorCount(error_type, context.component)
+  Log(error_config.log_level, FormatErrorMessage(error, context))
+  
+  // Handle retryable errors
+  if error_config.retryable:
+    return HandleRetryableError(error, context, error_config)
+  else:
+    return HandleNonRetryableError(error, context, error_config)
 
-### 2.4 Data Storage and Query Layer
-- **Primary Storage:**
-  - Utilize pandas DataFrames for lightweight, in-memory storage of embeddings, metadata (e.g., backlinks, usage frequency), and processed blocks.
-- **Persistence Strategy:**
-  - Implement hybrid persistence using both Parquet and Arrow formats:
-    - **Parquet Files:** For long-term storage of large datasets with efficient compression.
-    - **Arrow Files:** For high-performance data interchange and memory-mapping capabilities.
-  - Automatically select optimal format based on data characteristics and usage patterns.
-- **Pandas Query Engine:**
-  - Interpret natural language queries, map them to DataFrame operations, and execute complex filtering/join queries to retrieve relevant blocks.
-
-#### 2.4.1 Vector Database System
-
-The Vector Database system provides efficient storage and retrieval of embeddings for RAG functionality:
-
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
-
-flowchart TD
-    %% Vector Database System - optimized layout without subgraphs
-    classDef data stroke:#fff,stroke-width:1px,stroke-dasharray:3 3,color:#fff
-    classDef dataFlow stroke:#fff,stroke-width:1px,stroke-dasharray:5 5,color:#fff
-    classDef storage stroke:#fff,stroke-width:2px,color:#fff
-    classDef index stroke:#fff,stroke-width:2px,stroke-dasharray:10 5,color:#fff
-
-    %% Input flow
-    Input[Document Text] -->|Chunking| Chunks
-    Chunks[Text Chunks] -->|Embedding| Vectors
-    Vectors[Vector Embeddings] -->|Add to DB| DataFrame
-    Vectors -->|Dimensionality Reduction| ReducedVectors[PCA Reduced Vectors]
-    ReducedVectors -->|Index Building| FastIndex
-    
-    %% Database components
-    DataFrame[In-Memory DataFrame]:::data
-    DocTable[Document Metadata]:::storage
-    ChunkTable[Chunk Data]:::storage
-    VectorTable[Vector Data]:::storage
-    FastIndex[Fast Index Table]:::index
-    
-    %% Query components
-    QueryVector[Query Vector] -->|Dimension Reduction| ReducedQuery[Reduced Query Vector]
-    ReducedQuery -->|First-pass Search| CandidateSet[Candidate Set]
-    CandidateSet -->|Full-dimension Refinement| Ranking
-    QueryVector -.->|Optional Direct Search| Search
-    Search[Full Vector Search]:::dataFlow --> Filter
-    Filter[Source Filter]:::dataFlow --> Ranking
-    Ranking[Result Ranking]:::dataFlow --> Results
-    Results[Ranked Results]
-    
-    %% Connections between components
-    DataFrame <--> DocTable <-->|References| ChunkTable
-    ChunkTable <-->|References| VectorTable
-    DataFrame <--> Search
-    VectorTable -.->|Builds| FastIndex
-    FastIndex --> CandidateSet
+HandleRetryableError(error, context, config):
+  retry_count ← context.retry_count or 0
+  
+  // Check max retries
+  if retry_count ≥ config.max_retries:
+    return {success: false, action: "abort"}
+  
+  // Check circuit breaker
+  if config.circuit_breaker:
+    circuit ← circuit_breakers[context.component]
+    if not circuit.AllowRequest():
+      return {success: false, circuit: "open", action: "abort"}
+  
+  // Calculate backoff delay
+  backoff_delay ← config.initial_delay * (config.backoff_factor ^ retry_count)
+  
+  return {
+    success: false,
+    retryable: true,
+    retry_delay: backoff_delay,
+    retry_count: retry_count + 1,
+    action: "retry"
+  }
 ```
 
-**Core Features:**
+### 2.16 Security Considerations
 
-- **Document Management:** Add, retrieve, and remove document chunks with automatic deduplication
-- **Vector Search:** Efficient cosine similarity search with configurable threshold and ranking
-- **PCA-Optimized Indexing:** Fast approximate search using dimensionality reduction and specialized index structures
-- **Two-Tier Search:** Rapid candidate selection with reduced dimensions followed by precision ranking with full vectors
-- **Source Filtering:** Filter results by document source or metadata attributes
-- **Metadata Support:** Store and retrieve arbitrary metadata associated with documents
-- **Statistics and Monitoring:** Track database metrics including document count, chunk statistics, and embedding dimension information
+#### 2.16.1 Internal Data Security
 
-The VectorDatabase integrates with the broader RAG system:
-- Coordinated by RAGEngine for document processing and retrieval
-- Receives vectors from EmbeddingGenerator
-- Works with TextChunker for document preparation
-- Provides results to ContextAssembler for prompt enhancement
+**Goal:** Protect the confidentiality and integrity of information stored within the system, especially when running locally or on devices like robots.
 
-**Implementation Example:**
-```python
-# Using the VectorDatabase with PCA optimization
-db = VectorDatabase(use_pca_optimization=True, pca_dimensions=128)
+#### **Part 1: Setting Up Security**
 
-# Add document chunks with metadata
-chunk_ids = db.add_document(
-    text_chunks=["Content chunk 1", "Content chunk 2"],
-    vectors=[[0.1, 0.2, ...], [0.3, 0.4, ...]],  # Original high-dim vectors
-    metadata={"source": "documentation"},
-    source="guide.md"
-)
+1.  **Start-up:** When the system begins, it needs to prepare its security measures based on its configuration settings.
+2.  **Choose Method:** Determine which encryption technique to use (e.g., a standard like AES-GCM).
+3.  **Get the Master Key:** Securely load the main secret key. This key is the foundation for all data protection. It might come from a protected file, a system setting, or a special hardware component.
+4.  **Log Setup:** Record that the security system has started, but *never* log the actual key.
 
-# Search with tiered approach (PCA first, then full vector refinement)
-results = db.search(
-    query_vector=[0.15, 0.25, ...],
-    top_k=3,
-    threshold=0.7,
-    source_filter=["documentation"],
-    use_fast_index=True  # Enables PCA-based fast indexing
-)
-```
+#### **Part 2: Protecting Data (Encryption)**
 
-#### 2.4.2 Database Schema
+1.  **Input:** Receive the data that needs to be protected and an identifier telling us what *kind* of data it is (the context).
+2.  **Get Specific Key:** Use the master key and the context identifier to generate or retrieve a specific key *just for this data*. Think of it like using a master key to unlock a box containing a specific key for a particular room.
+3.  **Check Key:** If the specific key can't be found or generated, stop and report an error.
+4.  **Encrypt:** Use the specific key and the chosen encryption technique to scramble the data. This process also generates tags to ensure the data isn't tampered with later (integrity check).
+5.  **Output:** Return the scrambled data along with the necessary information (like the integrity tags) needed to unscramble it later.
 
-The in-memory database structure for vector storage includes:
+#### **Part 3: Accessing Protected Data (Decryption)**
 
-| Field | Type | Description |
-|-------|------|-------------| 
-| `doc_id` | String | Unique document identifier |
-| `chunk_id` | String | Unique chunk identifier |
-| `text` | String | Original text content |
-| `source` | String | Document source identifier |
-| `metadata` | JSON | Encoded metadata for the chunk |
-| `embedding` | Array | Full vector embedding as numpy array |
-| `reduced_embedding` | Array | PCA-reduced vector for fast indexing |
-| `timestamp` | DateTime | When the entry was created |
+1.  **Input:** Receive the scrambled data package and the context identifier (telling us what kind of data it *should* be).
+2.  **Get Specific Key:** Just like in encryption, use the master key and the context identifier to get the *same specific key* that was used to protect this data originally.
+3.  **Check Key:** If the specific key isn't available, stop and report an error.
+4.  **Decrypt & Verify:** Use the specific key to try and unscramble the data. Crucially, also check the integrity tags to make sure the data hasn't been changed since it was scrambled.
+5.  **Check Verification:**
+    *   If unscrambling works *and* the integrity check passes, return the original, readable data.
+    *   If anything fails (wrong key, data tampered with), report a security alert and return an error indicating failure.
 
-This structure ensures:
-- Efficient storage and retrieval of vector embeddings
-- Linkage between documents, chunks, and their embeddings
-- Fast approximate search capabilities through dimensionality reduction
-- Comprehensive metadata for filtering and context enrichment
-- Performance optimization through in-memory operations
---
-### 2.4 Data Storage and Query Layer
-- **Primary Storage:**
-  - Utilize pandas DataFrames for lightweight, in-memory storage of embeddings, metadata (e.g., backlinks, usage frequency), and processed blocks.
-- **Persistence Strategy:**
-  - Implement hybrid persistence using both Parquet and Arrow formats:
-    - **Parquet Files:** For long-term storage of large datasets with efficient compression.
-    - **Arrow Files:** For high-performance data interchange and memory-mapping capabilities.
-  - Automatically select optimal format based on data characteristics and usage patterns.
-- **Pandas Query Engine:**
-  - Interpret natural language queries, map them to DataFrame operations, and execute complex filtering/join queries to retrieve relevant blocks.
+#### **Part 4: Storing Data Securely**
 
-#### 2.4.1 Vector Database System
+1.  **Input:** Receive data to be stored and a label (storage key) for where to put it.
+2.  **Determine Context:** Figure out the context identifier based on the storage label (e.g., is it user preferences, sensor readings?).
+3.  **Encrypt:** Use the **Protecting Data (Encryption)** steps (Part 2) to scramble the data using its context.
+4.  **Check Encryption:** If encryption failed, stop and report the error.
+5.  **Store:** Save the resulting scrambled data package to the designated storage location (e.g., a file). Also, save the context identifier alongside it, so we know which key to use when retrieving it.
 
-The Vector Database system provides efficient storage and retrieval of embeddings for RAG functionality:
+#### **Part 5: Retrieving Data Securely**
 
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
+1.  **Input:** Receive the storage label for the data needed.
+2.  **Retrieve:** Fetch the scrambled data package and its associated context identifier from storage using the label.
+3.  **Check Retrieval:** If nothing is found at that label, report an error.
+4.  **Decrypt:** Use the **Accessing Protected Data (Decryption)** steps (Part 3), providing the retrieved scrambled package and context identifier.
+5.  **Output:**
+    *   If decryption is successful, return the original, readable data.
+    *   If decryption fails, report the error.
 
-flowchart TD
-    %% Vector Database System - optimized layout without subgraphs
-    classDef data stroke:#fff,stroke-width:1px,stroke-dasharray:3 3,color:#fff
-    classDef dataFlow stroke:#fff,stroke-width:1px,stroke-dasharray:5 5,color:#fff
-    classDef storage stroke:#fff,stroke-width:2px,color:#fff
-    classDef index stroke:#fff,stroke-width:2px,stroke-dasharray:10 5,color:#fff
+#### **Part 6: Managing Keys (Simplified Concept)**
 
-    %% Input flow
-    Input[Document Text] -->|Chunking| Chunks
-    Chunks[Text Chunks] -->|Embedding| Vectors
-    Vectors[Vector Embeddings] -->|Add to DB| DataFrame
-    Vectors -->|Dimensionality Reduction| ReducedVectors[PCA Reduced Vectors]
-    ReducedVectors -->|Index Building| FastIndex
-    
-    %% Database components
-    DataFrame[In-Memory DataFrame]:::data
-    DocTable[Document Metadata]:::storage
-    ChunkTable[Chunk Data]:::storage
-    VectorTable[Vector Data]:::storage
-    FastIndex[Fast Index Table]:::index
-    
-    %% Query components
-    QueryVector[Query Vector] -->|Dimension Reduction| ReducedQuery[Reduced Query Vector]
-    ReducedQuery -->|First-pass Search| CandidateSet[Candidate Set]
-    CandidateSet -->|Full-dimension Refinement| Ranking
-    QueryVector -.->|Optional Direct Search| Search
-    Search[Full Vector Search]:::dataFlow --> Filter
-    Filter[Source Filter]:::dataFlow --> Ranking
-    Ranking[Result Ranking]:::dataFlow --> Results
-    Results[Ranked Results]
-    
-    %% Connections between components
-    DataFrame <--> DocTable <-->|References| ChunkTable
-    ChunkTable <-->|References| VectorTable
-    DataFrame <--> Search
-    VectorTable -.->|Builds| FastIndex
-    FastIndex --> CandidateSet
-```
-
-**Core Features:**
-
-- **Document Management:** Add, retrieve, and remove document chunks with automatic deduplication
-- **Vector Search:** Efficient cosine similarity search with configurable threshold and ranking
-- **PCA-Optimized Indexing:** Fast approximate search using dimensionality reduction and specialized index structures
-- **Two-Tier Search:** Rapid candidate selection with reduced dimensions followed by precision ranking with full vectors
-- **Source Filtering:** Filter results by document source or metadata attributes
-- **Metadata Support:** Store and retrieve arbitrary metadata associated with documents
-- **Statistics and Monitoring:** Track database metrics including document count, chunk statistics, and embedding dimension information
-
-The VectorDatabase integrates with the broader RAG system:
-- Coordinated by RAGEngine for document processing and retrieval
-- Receives vectors from EmbeddingGenerator
-- Works with TextChunker for document preparation
-- Provides results to ContextAssembler for prompt enhancement
-
-**Implementation Example:**
-```python
-# Using the VectorDatabase with PCA optimization
-db = VectorDatabase(use_pca_optimization=True, pca_dimensions=128)
-
-# Add document chunks with metadata
-chunk_ids = db.add_document(
-    text_chunks=["Content chunk 1", "Content chunk 2"],
-    vectors=[[0.1, 0.2, ...], [0.3, 0.4, ...]],  # Original high-dim vectors
-    metadata={"source": "documentation"},
-    source="guide.md"
-)
-
-# Search with tiered approach (PCA first, then full vector refinement)
-results = db.search(
-    query_vector=[0.15, 0.25, ...],
-    top_k=3,
-    threshold=0.7,
-    source_filter=["documentation"],
-    use_fast_index=True  # Enables PCA-based fast indexing
-)
-```
-
-#### 2.4.2 Database Schema
-
-The in-memory database structure for vector storage includes:
-
-| Field | Type | Description |
-|-------|------|-------------| 
-| `doc_id` | String | Unique document identifier |
-| `chunk_id` | String | Unique chunk identifier |
-| `text` | String | Original text content |
-| `source` | String | Document source identifier |
-| `metadata` | JSON | Encoded metadata for the chunk |
-| `embedding` | Array | Full vector embedding as numpy array |
-| `reduced_embedding` | Array | PCA-reduced vector for fast indexing |
-| `timestamp` | DateTime | When the entry was created |
-
-This structure ensures:
-- Efficient storage and retrieval of vector embeddings
-- Linkage between documents, chunks, and their embeddings
-- Fast approximate search capabilities through dimensionality reduction
-- Comprehensive metadata for filtering and context enrichment
-- Performance optimization through in-memory operations
--
+*   **Master Key:** There's a primary secret key. It must be loaded securely when the system starts.
+*   **Data Keys:** Specific keys used for actual encryption/decryption are derived from the master key based on the data's context. *Never use the context directly as a key.* Use a secure method to generate a unique key *from* the master key and the context. This ensures different types of data are protected with different (derived) keys, enhancing security.
 
 ## 3. Implementation Plan
 
 ### 3.1 Phase 1: Core Infrastructure
 
-The first implementation phase focuses on establishing the fundamental system components:
-
-1. **Vector Database Core**
-   - Develop the in-memory DataFrame-based vector storage
-   - Implement basic similarity search functions
-   - Create document chunking and processing components
-   - Integrate persistence via Parquet/Arrow
-
-2. **Embedding System**
-   - Implement Ollama client for embedding generation
-   - Create batch processing and caching mechanisms
-   - Develop vector operations library
-   - Add dimensionality reduction options
-
-3. **Basic RAG Engine**
-   - Develop core RAGEngine class with singleton pattern
-   - Implement basic document addition and retrieval
-   - Create configuration management
-   - Add basic logging and monitoring
+This initial phase focuses on establishing the core infrastructure. Key activities include developing the vector operations framework with core similarity algorithms, transformation utilities, batch processing, and normalization functions. Simultaneously, the data storage layer will be created, featuring in-memory vector storage, persistence mechanisms (Parquet/Arrow), schema validation, and metadata support. The search indexing component will be implemented, incorporating HNSW graph generation, a two-tier search architecture leveraging PCA reduction, and search optimization strategies. Finally, a basic API foundation using FastAPI will be established, providing a RESTful interface for core operations, initial concurrency handling, request validation, and basic authentication.
 
 ### 3.2 Phase 2: Agent System Development
 
-The second phase focuses on creating the agentic framework:
-
-1. **Agent Architecture**
-   - Develop the base Agent abstract class
-   - Implement core agent functionality
-   - Create test harnesses for agent evaluation
-   - Develop agent state tracking and history
-
-2. **Primary Agents**
-   - Implement RAGAgent for enhanced retrieval
-   - Create ExpansionAgent for content enrichment
-   - Build SplitAgent for content segmentation
-   - Develop MergeAgent for content consolidation
-   - Implement PruneAgent for content refinement
-
-3. **Agent Integration**
-   - Connect agents to the RAG engine
-   - Implement agent collaboration mechanisms
-   - Create agent orchestration logic
-   - Add agent performance monitoring
+This phase focuses on developing the agentic framework. Key activities include establishing the core agent architecture by creating the base Agent abstract class, implementing core functionalities, developing test harnesses, agent state tracking, and integrating with the cognitive system's energy tracking. Subsequently, primary agents such as the RAGAgent, ExpansionAgent, SplitAgent, MergeAgent, and PruneAgent will be implemented. Finally, these agents will be integrated into the RAG engine, involving the implementation of collaboration mechanisms, orchestration logic, performance monitoring, and integration with the experience graph.
 
 ### 3.3 Phase 3: Data Acquisition System
 
-The third phase develops the data acquisition capabilities:
-
-1. **Document Processing**
-   - Integrate LlamaIndex document loaders
-   - Implement format-specific processing
-   - Create preprocessing transformations
-   - Add metadata extraction and normalization
-
-2. **Web Scraping & Crawling**
-   - Implement web page scraping components
-   - Create site crawling capabilities
-   - Add API connectors for structured data sources
-   - Develop feed processing for dynamic content
-
-3. **Multimodal Content Handling**
-   - Implement image processing and captioning
-   - Create multimodal embedding strategies
-   - Develop cross-modal retrieval techniques
-   - Integrate OCR for text-in-image extraction
+This phase focuses on building the data acquisition system. Key activities include developing the document processing pipeline with features like normalization, metadata extraction, chunking strategies, language detection, and entity extraction. Concurrently, the web crawling and scraping module will be built, incorporating a crawler framework, robots.txt handling, rate limiting, content extractors, and incremental crawling capabilities. Finally, multimodal processing will be implemented to handle images, audio, PDFs, and tables, ensuring seamless integration of diverse content types.
 
 ### 3.4 Phase 4: API and Services
 
-The fourth phase focuses on exposing functionality through APIs:
-
-1. **FastAPI Service** (Weeks 16-17)
-   - Develop REST API endpoints for core functionality
-   - Implement WebSocket support for real-time updates
-   - Create background task processing
-   - Add API authentication and rate limiting
-
-2. **CLI Interface** (Week 18)
-   - Implement command-line interface
-   - Create interactive shell mode
-   - Add batch processing commands
-   - Develop configuration management
-
-3. **Visualization Module** (Weeks 19-20)
-   - Create Pygame knowledge graph visualization
-   - Implement interactive node manipulation
-   - Add real-time update capabilities
-   - Create dashboard for system monitoring
+This phase focuses on building the API and service layer. Key activities include implementing the FastAPI service with RESTful endpoints, WebSocket support, authentication middleware, request validation, and response models. Concurrency management will be addressed through thread pooling, asynchronous request handling, rate limiting, request prioritization, and backpressure mechanisms. Finally, service integration involves connecting the service layer to core components, implementing service discovery and health checks, creating API documentation, and developing client libraries.
 
 ### 3.5 Phase 5: Optimization & Scaling
 
-The final phase optimizes performance and prepares for scaling:
-
-1. **Performance Tuning** (Weeks 21-22)
-   - Profile and optimize critical paths
-   - Improve vector operations performance
-   - Enhance caching strategies
-   - Reduce memory footprint
-
-2. **Scaling Capabilities** (Weeks 22-24)
-   - Implement distributed processing options
-   - Add sharding for large vector collections
-   - Create load balancing mechanisms
-   - Develop horizontal scaling capabilities
-
-3. **Final Testing & Documentation** (Weeks 24-26)
-   - Conduct comprehensive system testing
-   - Finalize documentation and examples
-   - Create benchmarks and performance reports
-   - Prepare for production deployment
-
-### 3.6 Development Timeline
-
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
-
-gantt
-    title RAG Engine Implementation Timeline
-    dateFormat  YYYY-MM-DD
-    
-    section Phase 1: Core
-    Vector Database Core     : 2023-08-01, 2w
-    Embedding System         : 2023-08-15, 2w
-    Basic RAG Engine         : 2023-08-29, 2w
-    
-    section Phase 2: Agents
-    Agent Architecture       : 2023-09-12, 2w
-    Primary Agents           : 2023-09-26, 3w
-    Agent Integration        : 2023-10-17, 2w
-    
-    section Phase 3: Data
-    Document Processing      : 2023-10-31, 2w
-    Web Scraping & Crawling  : 2023-11-14, 3w
-    Multimodal Content       : 2023-12-05, 3w
-    
-    section Phase 4: API
-    FastAPI Service          : 2023-12-26, 2w
-    CLI Interface            : 2024-01-09, 1w
-    Visualization Module     : 2024-01-16, 2w
-    
-    section Phase 5: Optimize
-    Performance Tuning       : 2024-01-30, 2w
-    Scaling Capabilities     : 2024-02-13, 2w
-    Final Testing & Docs     : 2024-02-27, 2w
-```
-
-This phased implementation plan ensures systematic development of the RAG engine, with regular milestones for testing and validation. Each phase builds upon the previous one, gradually adding capabilities while maintaining system stability and performance.
-
----
-
-## 4. Testing Strategy
-
-The testing strategy for the RAG engine ensures high-quality code, system reliability, and accurate functionality across all components. This comprehensive approach covers various test types and methodologies.
-
-### 4.1 Testing Architecture
-
-The testing system employs a multi-layered architecture to ensure thorough validation across all system components:
-
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
-
-flowchart TB
-    %% Testing Architecture - optimized layout without subgraphs
-    classDef unit stroke:#fff,stroke-width:2px,color:#fff
-    classDef integration stroke:#fff,stroke-width:2px,stroke-dasharray:5 5,color:#fff
-    classDef e2e stroke:#fff,stroke-width:1px,stroke-dasharray:3 3,color:#fff
-    classDef mock stroke:#fff,stroke-width:1px,stroke-dasharray:10 5,color:#fff
-
-    %% Unit Tests
-    CoreUnit[Core Unit Tests]:::unit
-    ModelsUnit[Models Unit Tests]:::unit
-    UtilsUnit[Utils Unit Tests]:::unit
-    RagUnit[RAG Unit Tests]:::unit
-    
-    %% Integration Tests
-    RagInt[RAG Integration]:::integration
-    WorkflowInt[Workflow Integration]:::integration
-    ApiInt[API Integration]:::integration
-    
-    %% E2E Tests
-    CliE2E[CLI E2E Tests]:::e2e
-    PythonApiE2E[Python API E2E]:::e2e
-    FullGenE2E[Full Generation E2E]:::e2e
-    
-    %% Mock Strategies
-    OllamaMock[Ollama API Mocks]:::mock
-    FilesystemMock[Filesystem Mocks]:::mock
-    ExternalApiMock[External API Mocks]:::mock
-    
-    %% Test Flow
-    CoreUnit & ModelsUnit & UtilsUnit & RagUnit --> RagInt & WorkflowInt & ApiInt
-    RagInt & WorkflowInt & ApiInt --> CliE2E & PythonApiE2E & FullGenE2E
-    
-    %% Mock connections
-    OllamaMock -.-> CoreUnit
-    OllamaMock -.-> RagInt
-    FilesystemMock -.-> ModelsUnit
-    ExternalApiMock -.-> ApiInt
-```
-
-This approach enables systematic testing from isolated components to complete system workflows, ensuring comprehensive test coverage and early detection of issues.
-
-### 4.2 Test Types
-
-#### 4.2.1 Unit Tests
-
-Unit tests validate individual components in isolation:
-
-- **Core Components:** Tests for RAGEngine, VectorDatabase, and EmbeddingGenerator classes
-- **Agent Tests:** Validation of agent behaviors and recursive operations
-- **Utility Tests:** Verification of vector operations and helper functions
-
-Example of a unit test for the RAGEngine:
-
-```python
-@patch('oarc_rag.rag.engine.VectorDatabase')
-@patch('oarc_rag.rag.engine.EmbeddingGenerator')
-@patch('oarc_rag.rag.engine.TextChunker')
-@patch('oarc_rag.rag.engine.check_for_ollama')
-def test_retrieve(self, mock_check_ollama, mock_chunker_class, 
-                 mock_embedding_class, mock_db_class):
-    """Test retrieving content from the RAG engine."""
-    # Setup mocks
-    mock_check_ollama.return_value = True
-    
-    mock_db = MagicMock()
-    mock_db.search.return_value = [
-        {"text": "Result 1", "similarity": 0.9},
-        {"text": "Result 2", "similarity": 0.8}
-    ]
-    mock_db_class.return_value = mock_db
-    
-    mock_embedder = MagicMock()
-    mock_embedder.embed_text.return_value = [0.1, 0.2, 0.3]
-    mock_embedding_class.return_value = mock_embedder
-    
-    # Initialize engine
-    engine = RAGEngine(run_id="test-run")
-    
-    # Perform retrieval
-    results = engine.retrieve(
-        "Test query", 
-        top_k=2, 
-        threshold=0.5, 
-        source_filter="test_source"
-    )
-    
-    # Verify calls
-    mock_embedder.embed_text.assert_called_once_with("Test query")
-    mock_db.search.assert_called_once_with(
-        [0.1, 0.2, 0.3],
-        top_k=2,
-        threshold=0.5,
-        source_filter="test_source"
-    )
-```
-
-Running unit tests:
-
-```bash
-# Run all unit tests
-pytest oarc_rag/tests/
-
-# Run specific test file
-pytest oarc_rag/tests/core/engine_test.py
-
-# Run tests with verbose output
-pytest -v oarc_rag/tests/
-```
-
-#### 4.2.2 Integration Tests
-
-Integration tests validate interactions between system components:
-
-- **RAG Integration:** Verify embedding generation, storage, and retrieval workflows
-- **API Integration:** Ensure FastAPI endpoints correctly interact with the RAG engine
-- **Component Interactions:** Test interactions between agents, the RAG engine, and the vector database
-
-Example of running integration tests:
-
-```bash
-# Run all integration tests
-pytest oarc_rag/tests/integration/
-
-# Run specific integration test
-pytest oarc_rag/tests/integration/test_workflow.py
-
-# Generate report for integration tests
-pytest oarc_rag/tests/integration/ --junitxml=reports/integration.xml
-```
-
-#### 4.2.3 End-to-End Tests
-
-End-to-end tests validate complete system workflows:
-
-- **CLI Workflow Tests:** Test command-line interface operations
-- **Python API Workflow:** Validate API client functionality
-- **Full Generation Workflow:** Test complete document processing, embedding, and retrieval cycle
-
-Example of running E2E tests:
-
-```bash
-# Run E2E tests (requires Ollama)
-pytest oarc_rag/tests/e2e/
-
-# Run with extended timeout for API tests
-pytest --timeout=300 oarc_rag/tests/e2e/
-```
-
-### 4.3 Testing Environment Setup
-
-Setting up the testing environment requires the following steps:
-
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
-
-flowchart TD
-    %% Testing Environment Setup - optimized layout
-    classDef step stroke:#fff,stroke-width:2px,color:#fff
-    classDef cmd stroke:#fff,stroke-width:1px,stroke-dasharray:5 5,color:#fff
-    classDef warn stroke:#fff,stroke-width:2px,stroke-dasharray:3 3,color:#fff
-
-    A[Start]:::step --> B
-    B[Clone Repository]:::step --> C
-    C[Create Virtual Environment]:::step --> D
-    D[Activate Environment]:::cmd --> E
-    E[Install Development Dependencies]:::cmd --> F
-    F[Install Test Dependencies]:::cmd --> G
-    G{Check Ollama}:::step -->|Running| I[Ready for Testing]:::step
-    G -->|Not Running| H[Start Ollama]:::warn
-    H --> G
-```
-
-Implementation steps:
-
-1. Activate your virtual environment:
-   ```bash
-   # Windows
-   .venv\Scripts\activate
-   
-   # Linux/macOS
-   source .venv/bin/activate
-   ```
-
-2. Install development and test dependencies:
-   ```bash
-   pip install -e ".[dev]"
-   pip install pytest pytest-cov mock
-   ```
-
-3. Verify Ollama is running for tests that require AI functionality:
-   ```bash
-   curl http://localhost:11434
-   ```
-
-### 4.4 Ollama Integration Testing
-
-Testing the Ollama integration requires special considerations:
-
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
-
-sequenceDiagram
-    %% Ollama Testing diagram in dark theme
-    participant Test as Test Suite
-    participant Mock as Mock Layer
-    participant Ollama as Ollama Client
-    participant API as Ollama API
-    
-    Test->>Mock: Call OllamaClient
-    
-    alt Mock Mode
-        Mock->>Mock: Return pre-defined response
-        Mock-->>Test: Mocked response
-    else Live Mode
-        Mock->>Ollama: Forward request
-        Ollama->>API: Make API request
-        API-->>Ollama: Return response
-        Ollama-->>Test: Pass through response
-    end
-```
-
-The system supports two testing modes for Ollama:
-
-1. **Mock Tests:** Use mock responses for tests without calling actual Ollama API
-   ```python
-   @patch('oarc_rag.ai.client.requests.post')
-   def test_generate_with_mocked_ollama(self, mock_post):
-       mock_response = MagicMock()
-       mock_response.json.return_value = {"message": {"content": "Mocked response"}
-       mock_post.return_value = mock_response
-       
-       # Test with mocked response
-       client = OllamaClient()
-       result = client.generate("Test prompt")
-       self.assertEqual("Mocked response", result)
-   ```
-
-2. **Live Tests:** For tests that interact with a running Ollama instance
-   ```bash
-   # Set environment variable to use real Ollama
-   export OARC_RAG_TEST_USE_REAL_OLLAMA=1
-   
-   # Run the live tests
-   pytest oarc_rag/tests/live/test_ollama_live.py
-   ```
-
-For live tests, ensure required models are available:
-```bash
-ollama pull llama3.1:latest
-```
-
-### 4.5 Continuous Integration
-
-The project uses GitHub Actions for continuous integration:
-
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
-
-flowchart LR
-    %% CI Workflow - optimized layout
-    classDef pr stroke:#fff,stroke-width:3px,color:#fff
-    classDef action stroke:#fff,stroke-width:1px,stroke-dasharray:5 5,color:#fff
-    classDef outcome stroke:#fff,stroke-width:2px,color:#fff
-
-    PR[Pull Request]:::pr --> Actions
-    Push[Push to main]:::pr --> Actions
-    
-    %% Simplified workflow without subgraph
-    Lint[Code Linting]:::action --> TypeCheck
-    TypeCheck[Type Checking]:::action --> UnitTests
-    UnitTests[Unit Tests]:::action --> IntTests
-    IntTests[Integration Tests]:::action --> Results
-    
-    %% Results and outcomes
-    Actions[GitHub Actions] --> Lint
-    Results[CI Results]:::outcome --> |Success| Merge[Ready to Merge]:::outcome
-    Results --> |Failure| Fix[Requires Fixes]:::outcome
-```
-
-The CI workflow automatically runs on pull requests and pushes to the main branch, performing:
-- Code linting with flake8
-- Type checking with mypy
-- Unit tests with pytest
-- Integration tests with mocked dependencies
-
-### 4.6 Code Coverage
-
-Code coverage is tracked to ensure comprehensive test coverage:
-
-```bash
-# Generate coverage report
-pytest --cov=oarc_rag --cov-report=html oarc_rag/tests/
-```
-
-This generates an HTML report showing test coverage for each module:
-
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
-
-pie
-    %% Code Coverage diagram - dark theme
-    title Code Coverage by Module
-    "Core" : 87
-    "RAG" : 76
-    "AI Integration" : 82
-    "Utils" : 91
-    "CLI" : 68
-```
-
-The team maintains a target of at least 80% code coverage overall, with critical components like the RAG engine and vector database requiring at least 90% coverage.
-
----
-
-## 5. Future Considerations
-
-Future enhancements to the RAG engine could include:
-
-- **Advanced Vector Database Integration:** Support for external vector databases like Milvus, Pinecone, or FAISS for handling extremely large datasets beyond in-memory capacity.
-- **Self-Improving Agents:** Implementing reinforcement learning from human feedback (RLHF) to train agents to progressively improve their content generation and information retrieval.
-- **Multi-LLM Integration:** Support for multiple LLM backends with automatic routing based on query complexity and content requirements.
-- **Federated Vector Search:** Enabling distributed vector search across multiple independent RAG instances.
-- **Automated Knowledge Graph Construction:** Dynamically building knowledge graphs from the ingested documents to enhance relationships between content blocks.
-- **Stream Processing:** Real-time data ingestion and processing from continuous data sources.
-- **Zero-Shot Information Extraction:** Advanced capabilities to extract structured information from unstructured text without explicit training.
-- **Explainable Retrieval:** Providing transparency into why specific content blocks were retrieved and how they relate to the user query.
+This phase focuses on optimizing system performance and ensuring scalability. Key activities include implementing performance enhancements such as caching strategies, database optimizations, parallel and batch processing, and memory management improvements. Concurrently, the scaling architecture will be developed by adding support for horizontal scaling, distributed coordination mechanisms, load balancing, data partitioning strategies, and resilience patterns. Robust monitoring and diagnostics will also be established through telemetry collection, performance dashboards, an alerting system, diagnostic tools, and centralized log aggregation.
+
+### 3.6 Phase 6: Cognitive System Implementation
+
+This phase focuses on implementing the Cognitive System (CRAG). Key tasks include developing the `CognitiveEnergyModel` for energy and entropy tracking, system state transitions, and monitoring. Sleep mechanisms will be implemented, covering sleep stages, scheduling algorithms, maintenance operations, and proactive planning. The dual-graph memory architecture will be constructed, involving the experience graph, memory graph, their integration, and graph-aware retrieval techniques. Finally, the cognitive system will be integrated with the RAG engine and agent framework, API endpoints for cognitive state will be added, and comprehensive testing under various loads will be performed, followed by parameter tuning for optimal performance.
+
+## 4. Testing & Validation
+
+### 4.1 Test Methodology
+
+The system employs a comprehensive test methodology encompassing multiple levels. Unit tests focus on individual components using pytest, mocking dependencies, and aiming for high branch coverage through parameterized and property-based testing. Integration tests validate interactions between components, service layers, databases, and APIs, often mocking external systems. System tests provide end-to-end validation using realistic data scenarios, including performance under load, fault injection, and recovery testing. Finally, specialized tests address crucial non-functional aspects such as security (fuzzing, penetration testing), concurrency, memory leak detection, backward compatibility, and internationalization.
+
+### 4.2 Performance Benchmarks
+
+The system's performance is validated against specific benchmarks, targeting vector search latency under 50ms for 1 million vectors, end-to-end query processing below 200ms, document ingestion under 500ms per document, and individual agent operations completing in less than 1 second. Throughput goals include handling over 100 queries per second, performing over 500 vector searches per second, ingesting more than 50 documents per second, and supporting over 1000 concurrent connections. Resource utilization targets aim for a base memory footprint under 2GB (less than 4GB under load), CPU utilization below 70% at steady state, sustained disk I/O under 100MB/s, and network usage below 50Mbps per instance.
+
+### 4.3 Compliance Validation
+
+Compliance validation ensures the system meets specified standards, including API conformance to OpenAPI specifications, backward compatibility, and adherence to relevant standards. Data handling is validated for integrity, encryption compliance, and proper access control enforcement. Resilience requirements are also tested, confirming the system's ability to recover from failures, degrade gracefully, and maintain data consistency during disruptions.
+
+## 5. Operational Procedures
+
+### 5.1 Deployment Guidelines
+
+Deployment guidelines encompass establishing the necessary environment, detailing hardware recommendations, software dependencies, network configuration, and storage requirements. The installation process provides step-by-step instructions, outlines configuration options, includes validation checks, and specifies rollback procedures. Initial configuration focuses on security setup, performance tuning, defining integration points, and managing initial data loading.
+
+### 5.2 Monitoring & Maintenance
+
+Ongoing operational procedures involve continuous health monitoring, tracking key metrics, analyzing logs, and detecting anomalies against defined alert thresholds. Regular maintenance includes database optimization, cache management, backup execution, and applying updates. Troubleshooting guidelines cover common issues, diagnostic steps, performance tuning, and recovery procedures.
+
+### 5.3 Scaling Considerations
+
+Scaling considerations encompass vertical, horizontal, and database strategies. Vertical scaling involves optimizing memory, CPU, and disk I/O resources within individual instances and managing resource allocation effectively. Horizontal scaling leverages stateless design principles, data partitioning, load balancing, and service discovery to distribute workload across multiple nodes. Database scaling employs techniques such as read replicas, sharding strategies, connection pooling, and index optimization to manage increasing data volumes and query demands.
 
 ## 6. Conclusion
 
-The Ultra-Fast, Lightweight RAG Engine provides a complete solution for retrieval-augmented generation with a focus on performance, modularity, and extensibility. By combining efficient vector operations, recursive agent-based enhancement, and a flexible storage architecture, the system delivers:
+The Ultra-Fast, Lightweight RAG Engine with Cognitive enhancements (CRAG) provides a complete solution for retrieval-augmented generation with a focus on performance, self-regulation, and memory organization. By combining efficient vector operations, recursive agent-based enhancement, a flexible storage architecture, and a dual-graph memory system, the solution delivers:
 
 1. **High Performance:** Through optimized vector operations and efficient data structures
 2. **Flexibility:** Via modular design and customizable components
 3. **Extensibility:** With well-defined interfaces for adding new functionality
 4. **Self-Improvement:** Through recursive agent operations on content
-5. **Developer-Friendly:** With intuitive APIs and comprehensive documentation
+5. **Self-Regulation:** Via the CRAG system with energy/entropy tracking
+6. **Dual Memory Architecture:** Through the complementary memory graph and experience graph
+7. **Developer-Friendly:** With clear API interfaces and comprehensive documentation
 
-This specification document serves as both a blueprint for implementation and a reference guide for developers integrating with the RAG engine. As the field of retrieval-augmented generation continues to evolve, this architecture provides a solid foundation for incorporating future advances while maintaining high performance and reliability.
+This specification document serves as both a blueprint for implementation and a reference guide for developers integrating with the CRAG system. The architecture provides a solid foundation for implementing high-performance retrieval-augmented generation systems with cognitive capabilities.
 
-## 7. Best Practices
+## 7. Appendices
 
-### 7.1 Document Preparation
-
-For optimal RAG performance, document preparation should follow these guidelines:
-
-- **Chunking Strategy:** 
-  - Choose chunk size appropriate for your content (typically 512-1024 tokens)
-  - Use semantic chunking when possible (chunk at paragraph or section boundaries)
-  - Maintain sufficient overlap between chunks (typically 10-20%)
-
-- **Metadata Enrichment:**
-  - Add rich metadata to each document to enable filtering
-  - Include source information, dates, authors, and categories
-  - Consider adding custom relevance scores for critical documents
-
-- **Pre-processing:**
-  - Remove boilerplate content and markup
-  - Normalize text formatting and spacing
-  - Handle special characters and entities consistently
-
-### 7.2 Query Optimization
-
-To improve retrieval quality:
-
-- **Query Expansion:**
-  - Generate multiple variations of the same query
-  - Include synonyms and related terms
-  - Consider temporal aspects if relevant
-
-- **Query Parameters:**
-  - Adjust search threshold based on query specificity
-  - Tune top_k for precision vs. recall trade-offs
-  - Use source filters to narrow search space
-
-- **Hybrid Search:**
-  - Combine keyword and vector search for better precision
-  - Weight exact matches higher than semantic matches for technical terms
-  - Use query classification to adjust search strategy
-
-### 7.3 Context Assembly
-
-For effective context assembly:
-
-- **Ordering Strategy:**
-  - Order retrieved chunks by relevance and coherence
-  - Ensure logical flow between chunks when possible
-  - Place most relevant information earlier in the context
-
-- **Deduplication:**
-  - Remove redundant information
-  - Merge similar chunks when appropriate
-  - Preserve unique details when combining related chunks
-
-- **Context Compression:**
-  - Summarize lengthy contexts to fit within token limits
-  - Prioritize information directly relevant to the query
-  - Use agents to extract and synthesize key points
-
-### 7.4 System Maintenance
-
-For ongoing system health:
-
-- **Embedding Refresh:**
-  - Re-generate embeddings when using new models
-  - Periodically validate embedding quality
-  - Track embedding model versions in metadata
-
-- **Performance Monitoring:**
-  - Log query latencies and throughput
-  - Monitor memory usage, especially for vector operations
-  - Set up alerts for degraded performance
-
-- **Database Maintenance:**
-  - Regularly validate vector database integrity
-  - Implement backup and recovery procedures
-  - Clean up orphaned vectors and metadata
-
-### 7.5 Design Pattern Usage
-
-Guidelines for using the singleton and factory patterns:
-
-- **Singleton Pattern:**
-  - Use for components that should exist only once (e.g., RAGEngine)
-  - Ensure thread safety in concurrent environments
-  - Provide a reset mechanism for testing
-  - Example:
-    ```python
-    @singleton
-    class RAGEngine:
-        def __init__(self):
-            # Initialize once
-            pass
-    ```
-
-- **Factory Pattern:**
-  - Use for creating related objects with varying configurations
-  - Centralize creation logic to simplify client code
-  - Support extension through new factory methods
-  - Example:
-    ```python
-    class AgentFactory:
-        @classmethod
-        def create_agent(cls, agent_type, **kwargs):
-            if agent_type == "expansion":
-                return ExpansionAgent(**kwargs)
-            elif agent_type == "merge":
-                return MergeAgent(**kwargs)
-            # other agent types
-    ```
-
-### 7.6 Testing Best Practices
-
-#### Writing Effective Tests
-- **Test Isolation**: Ensure tests can run independently and don't affect each other
-- **Arrange-Act-Assert**: Structure tests with clear setup, action, and verification phases
-- **Mock External Dependencies**: Use mocks for external services like Ollama
-- **Parameterized Tests**: Use pytest's parameterize feature for testing multiple inputs
-- **Test Edge Cases**: Include tests for boundary conditions and error scenarios
-
-#### Test Organization
-- Organize tests to mirror the source code structure
-- Group related test cases in test classes
-- Use descriptive test method names that explain what's being tested
-
-#### Test Environment
-- Use temporary directories for file operations
-- Reset singleton instances between tests
-- Use fixtures for common setup code
-- Implement proper teardown for resource cleanup
-
-#### Troubleshooting Test Issues
-- Use the test decision flow chart to determine appropriate test strategy:
-
-```mermaid
-%%{init: {
-    'theme': 'dark',
-    'themeVariables': {
-        'background': 'transparent',
-        'primaryColor': '#ffffff',
-        'primaryTextColor': '#ffffff',
-        'primaryBorderColor': '#ffffff',
-        'lineColor': '#ffffff',
-        'fontSize': '16px',
-        'fontFamily': 'arial'
-    }
-}}%%
-
-flowchart TD
-    %% Test Decision Flow diagram - optimized layout
-    classDef start stroke:#fff,stroke-width:3px,color:#fff
-    classDef decision stroke:#fff,stroke-width:2px,color:#fff
-    classDef action stroke:#fff,stroke-width:1px,color:#fff
-
-    %% Linear flow arrangement to minimize crossing lines
-    Start[Start Testing]:::start --> A
-    A{Ollama Required?}:::decision -->|Yes| B
-    A -->|No| E
-    B{Ollama Available?}:::decision -->|Yes| C
-    B -->|No| D
-    D{CI Environment?}:::decision -->|Yes| F
-    D -->|No| G
-    G[Start Ollama]:::action --> B
-    
-    C[Run Live Tests]:::action --> End[Review Results]
-    E[Run Standard Tests]:::action --> End
-    F[Use Mocks]:::action --> End
-```
-
-## 8. Usage Examples
-
-### 8.1 Basic RAG Workflow
-
-This example demonstrates a simple RAG workflow:
-
-```python
-from oarc_rag.rag import RAG
-
-# Initialize RAG system
-rag = RAG(embedding_model="llama3.1:latest")
-
-# Add documents to the knowledge base
-rag.add_file("documents/product_manual.pdf")
-rag.add_document(
-    text="Our new model XYZ-1000 features advanced cooling technology.",
-    source="product_specs.txt"
-)
-
-# Query the system
-results = rag.retrieve(query="How does the cooling system work?", top_k=3)
-for result in results:
-    print(f"Score: {result['similarity']:.2f} - {result['text']}")
-
-# Generate an augmented response
-response = rag.generate(query="Explain the cooling system in simple terms.")
-print(f"Generated response: {response}")
-```
-
-### 8.2 Advanced Query Strategies
-
-This example shows advanced querying techniques:
-
-```python
-from oarc_rag.rag import RAG
-from oarc_rag.core.query import QueryFormulator
-
-# Initialize components
-rag = RAG(embedding_model="llama3.1:latest")
-query_formulator = QueryFormulator()
-
-# Add documents
-rag.add_document(text="Technical documentation...", source="technical_docs.md")
-
-# Create specialized queries
-query = "How to configure the system?"
-expanded_queries = query_formulator.expand_query(query)
-
-# Search with multiple strategies
-all_results = []
-for expanded_query in expanded_queries:
-    results = rag.retrieve(
-        query=expanded_query,
-        top_k=3,
-        threshold=0.75
-    )
-    all_results.extend(results)
-
-# Deduplicate and sort results
-unique_results = query_formulator.deduplicate_results(all_results)
-ranked_results = query_formulator.rank_by_relevance(unique_results, query)
-
-# Generate response with enhanced context
-response = rag.generate(
-    query=query,
-    context=query_formulator.assemble_context(ranked_results)
-)
-```
-
-### 8.3 Performance Optimization
-
-This example demonstrates performance optimization techniques:
-
-```python
-import time
-from oarc_rag.rag import RAG
-from oarc_rag.utils.profiler import measure_performance
-
-# Initialize optimized RAG system
-rag = RAG(
-    embedding_model="llama3.1:latest",
-    chunk_size=256,  # Smaller chunks for more precise retrieval
-    chunk_overlap=25,  # 10% overlap
-)
-
-# Enable caching
-rag.enable_caching(
-    query_cache_size=1000,
-    embedding_cache_size=5000,
-    document_cache_size=200
-)
-
-# Measure ingestion performance
-@measure_performance
-def ingest_documents(rag_system, file_paths):
-    for file_path in file_paths:
-        rag_system.add_file(file_path)
-
-file_list = ["doc1.pdf", "doc2.pdf", "doc3.pdf"]
-ingest_documents(rag, file_list)
-
-# Measure query performance
-start = time.time()
-for i in range(10):
-    results = rag.retrieve(f"Query variation {i}", top_k=5)
-query_time = (time.time() - start) / 10
-print(f"Average query time: {query_time:.4f} seconds")
-
-# Get performance metrics
-metrics = rag.get_performance_metrics()
-print(f"Cache hit rate: {metrics['cache_hit_rate']:.2%}")
-print(f"Average vector search time: {metrics['avg_vector_search_time']:.4f}s")
-```
-
-## 9. System Dependencies
-
-### 9.1 Required Dependencies
-
-The RAG engine relies on the following core dependencies:
-
-| Dependency | Version | Purpose |
-|------------|---------|---------|
-| `requests` | >=2.32.3 | Web requests and API calls |
-| `ollama` | >=0.4.7 | Ollama API client library |
-| `asyncio` | >=3.4.3 | Asynchronous operations |
-| `numpy` | >=2.2.4 | Vector operations |
-| `pandas` | >=2.2.3 | Data manipulation and analysis |
-| `tenacity` | >=9.1.2 | Retrying operations with exponential backoff |
-| `tqdm` | >=4.67.1 | Progress bar for long-running tasks |
-| `scikit-learn` | >=1.6.1 | Vector operations and ML utilities |
-| `scipy` | >=1.15.2 | Scientific computing |
-| `llama-index` | >=0.12.28 | RAG framework |
-| `llama-index-readers-json` | >=0.3.0 | JSON document processing |
-| `llama-index-experimental` | >=0.5.4 | Experimental features |
-| `langchain` | >=0.3.23 | Text chunking and RAG pipelines |
-| `langchain-community` | >=0.3.21 | Community-contributed modules |
-| `langchain-ollama` | >=0.3.0 | LangChain integration with Ollama |
-| `tiktoken` | >=0.9.0 | Token counting |
-
-### 9.2 Optional Dependencies
-
-Additional optional dependencies enhance specific functionalities:
-
-| Dependency | Version | Purpose |
-|------------|---------|---------|
-| `beautifulsoup4` | >=4.12.3 | Web scraping |
-| `PyPDF2` | >=3.0.1 | PDF processing |
-| `python-docx` | >=1.1.0 | DOCX processing |
-| `pillow` | >=10.2.0 | Image processing |
-| `fastapi` | >=0.110.0 | API framework |
-| `uvicorn` | >=0.27.1 | ASGI server |
-| `websockets` | >=12.0 | WebSocket support |
-| `pygame` | >=2.5.2 | Visualization |
-
-### 9.3 Vector Operations Utilities
-
-The system includes specialized vector utilities that minimize external dependencies:
-
-- **Normalization Functions:** Fast vector normalization with NumPy
-- **Cosine Similarity:** Optimized similarity calculation using dot products
-- **Batch Processing:** Efficient handling of multiple vectors simultaneously
-- **Dimensionality Reduction:** PCA implementation for embedding size reduction
-- **Vector Quantization:** Optional compression for memory optimization
-- **In-Memory HNSW:** Custom implementation for approximate nearest neighbors search
-
-Example vector operations utility:
-
-```python
-import numpy as np
-from typing import List, Tuple
-
-def batch_cosine_similarity(query_vector: np.ndarray, 
-                           document_vectors: np.ndarray) -> np.ndarray:
-    """
-    Calculate cosine similarity between a query vector and multiple document vectors.
-    
-    Args:
-        query_vector: Query embedding vector (1D array)
-        document_vectors: Matrix of document embedding vectors (2D array)
-    
-    Returns:
-        Array of similarity scores
-    """
-    # Normalize query vector
-    query_norm = np.linalg.norm(query_vector)
-    if query_norm > 0:
-        query_vector = query_vector / query_norm
-    
-    # Normalize document vectors
-    doc_norms = np.linalg.norm(document_vectors, axis=1, keepdims=True)
-    non_zero_mask = doc_norms > 0
-    normalized_docs = np.zeros_like(document_vectors)
-    normalized_docs[non_zero_mask.flatten()] = (
-        document_vectors[non_zero_mask.flatten()] / 
-        doc_norms[non_zero_mask]
-    )
-    
-    # Calculate similarities using dot product of normalized vectors
-    similarities = np.dot(normalized_docs, query_vector)
-    
-    return similarities
-```
-
-## 10. Appendix
-
-### 10.1 Glossary
+### 7.1 Glossary of Terms
 
 | Term | Definition |
 |------|------------|
-| **ANN** | Approximate Nearest Neighbors - An algorithm for finding similar vectors without computing all exact distances |
-| **Backlink** | Reference from one content block back to another source block |
-| **Chunk** | A segment of text split from a larger document for embedding and retrieval |
-| **Cosine Similarity** | A measure of similarity between two non-zero vectors calculated using the cosine of the angle between them |
-| **Embedding** | A dense vector representation of text that captures semantic meaning |
-| **HNSW** | Hierarchical Navigable Small World - An efficient graph structure for approximate nearest neighbor search |
-| **LLM** | Large Language Model - AI models like GPT that generate and process human language |
-| **Metadata** | Additional information about data, such as source, author, tags, etc. |
-| **PCA** | Principal Component Analysis - A technique for dimensionality reduction |
-| **RAG** | Retrieval-Augmented Generation - Enhancing LLM output with retrieved information |
-| **TTL** | Time To Live - The lifespan of cached data before expiration |
-| **Vector Database** | A specialized database optimized for storing and querying vector embeddings |
+| RAG | Retrieval-Augmented Generation, a technique that enhances LLM responses with relevant retrieved information |
+| CRAG | Cognitive RAG, the enhanced system with self-regulation and memory capabilities |
+| Embedding | Vector representation of text in high-dimensional space |
+| HNSW | Hierarchical Navigable Small World, an algorithm for approximate nearest neighbor search |
+| ANN | Approximate Nearest Neighbors, techniques for efficient similarity search |
+| PCA | Principal Component Analysis, dimensionality reduction technique |
+| Experience Graph | Associative memory structure for episodic memory representation |
+| Memory Graph | Structured knowledge representation with semantic relationships |
+| Agent | Specialized component that performs specific operations on content |
+| Chunking | Process of dividing documents into smaller sections for processing |
+| Energy | Computational resource metric in the cognitive system |
+| Entropy | Measure of system disorder in the cognitive system |
+| Sleep Cycle | Period of system maintenance and optimization |
+| Vector Database | Storage system optimized for vector embeddings |
 
-### 10.2 Code Examples
-
-#### 10.2.1 Vector Database Examples
-
-**Basic Document Addition and Search:**
-```python
-from oarc_rag.database import VectorDatabase
-
-# Initialize database
-db = VectorDatabase()
-
-# Add document with chunks
-db.add_document(
-    text_chunks=["Python is a programming language.", "It supports multiple paradigms."],
-    vectors=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
-    metadata={"category": "programming"},
-    source="python_guide.md"
-)
-
-# Search for similar content
-results = db.search(
-    query_vector=[0.15, 0.25, 0.35],
-    top_k=5,
-    threshold=0.6
-)
-
-# Process results
-for item in results:
-    print(f"Text: {item['text']}")
-    print(f"Similarity: {item['similarity']:.3f}")
-    print(f"Source: {item['source']}")
-    print(f"Metadata: {item['metadata']}")
-    print("---")
-```
-
-**Advanced Filtering and Management:**
-```python
-# Search with source filtering
-python_results = db.search(
-    query_vector=[0.1, 0.2, 0.3],
-    top_k=3,
-    source_filter=["python_guide.md"]
-)
-
-# Get database statistics
-stats = db.get_stats()
-print(f"Total documents: {stats['document_count']}")
-print(f"Total chunks: {stats['chunk_count']}")
-print(f"Average chunks per document: {stats['avg_chunks_per_doc']:.2f}")
-
-# Remove specific document
-db.remove_document("outdated_guide.md")
-
-# List all document sources
-sources = db.get_document_sources()
-print(f"Available sources: {sources}")
-```
-
-#### 10.2.2 Agent Integration Examples
-
-**RAG-Enhanced Agent with Vector Database:**
-```python
-from oarc_rag.rag import RAGEngine, RAGAgent
-from oarc_rag.database import VectorDatabase
-
-# Initialize components
-db = VectorDatabase()
-rag_engine = RAGEngine(vector_db=db)
-
-# Add knowledge to the database
-rag_engine.add_document(
-    text="Python is a high-level programming language known for its readability and simplicity.",
-    metadata={"type": "definition"},
-    source="programming_concepts.md"
-)
-
-# Create RAG-enhanced agent
-agent = RAGAgent(name="ProgrammingTutor", rag_engine=rag_engine)
-
-# Generate enhanced response
-query = "Explain what Python is good for"
-context = agent.retrieve_context(topic="Python", query_type="explanation")
-enhanced_prompt = agent.create_enhanced_prompt(query, context_strategy="relevant_facts")
-response = agent.generate(enhanced_prompt)
-
-print(f"Enhanced response: {response}")
-```
-
-#### 10.2.3 Performance Optimization Examples
-
-**Vector Database Optimization:**
-```python
-import time
-from oarc_rag.database import VectorDatabase
-from oarc_rag.utils.profiler import measure_performance
-
-# Initialize optimized database
-db = VectorDatabase(use_cache=True)
-
-# Measure insertion performance
-@measure_performance
-def batch_insert(db, chunks, vectors):
-    return db.add_document(
-        text_chunks=chunks,
-        vectors=vectors,
-        source="performance_test.md"
-    )
-
-# Generate test data
-chunks = ["Test chunk " + str(i) for i in range(1000)]
-vectors = [[float(i)/1000] * 128 for i in range(1000)]
-
-# Measure performance
-start = time.time()
-chunk_ids = batch_insert(db, chunks, vectors)
-end = time.time()
-
-print(f"Inserted {len(chunk_ids)} chunks in {end-start:.3f} seconds")
-print(f"Average insertion time: {(end-start)/len(chunk_ids):.6f} seconds per chunk")
-
-# Measure query performance
-start = time.time()
-for i in range(100):
-    query_vector = [float(i)/100] * 128
-    results = db.search(query_vector, top_k=5)
-end = time.time()
-
-print(f"Performed 100 queries in {end-start:.3f} seconds")
-print(f"Average query time: {(end-start)/100:.6f} seconds per query")
-```
-
-#### 10.2.4 Testing Examples
-
-**Basic Unit Test:**
-```python
-import unittest
-from unittest.mock import patch, MagicMock
-from oarc_rag.rag.engine import RAGEngine
-
-class TestRAGEngine(unittest.TestCase):
-    def setUp(self):
-        """Set up test environment."""
-        self.engine = RAGEngine(run_id="test-run", create_dirs=False)
-    
-    def tearDown(self):
-        """Clean up after tests."""
-        self.engine = None
-        RAGEngine._reset_singleton()
-    
-    @patch('oarc_rag.rag.engine.VectorDatabase')
-    def test_add_document(self, mock_db_class):
-        """Test adding a document to the RAG engine."""
-        mock_db = MagicMock()
-        mock_db.add_document.return_value = [1, 2]
-        mock_db_class.return_value = mock_db
-        
-        self.engine.vector_db = mock_db
-        
-        result = self.engine.add_document(
-            text="Test document content",
-            metadata={"source": "test"},
-            source="test.md"
-        )
-        
-        self.assertEqual(len(result), 2)
-        mock_db.add_document.assert_called_once()
-```
-
-**Testing with Fixtures:**
-```python
-import pytest
-from oarc_rag.rag.engine import RAGEngine
-
-# Define fixtures in conftest.py
-@pytest.fixture
-def mock_vector_db():
-    mock_db = MagicMock()
-    mock_db.search.return_value = [
-        {"id": 1, "text": "Result 1", "similarity": 0.9},
-        {"id": 2, "text": "Result 2", "similarity": 0.8}
-    ]
-    return mock_db
-
-# Use fixtures in tests
-def test_retrieve_with_fixture(mock_vector_db):
-    engine = RAGEngine(run_id="test-fixture")
-    engine.vector_db = mock_vector_db
-    
-    results = engine.retrieve("Test query")
-    
-    assert len(results) == 2
-    assert results[0]["text"] == "Result 1"
-    mock_vector_db.search.assert_called_once()
-```
-
-**Integration Test with Mock:**
-```python
-def test_rag_agent_integration():
-    """Integration test for RAG agent with mocked components."""
-    # Setup mock engine and client
-    mock_engine = MagicMock()
-    mock_engine.retrieve.return_value = [
-        {"text": "Python is a programming language.", "similarity": 0.95}
-    ]
-    
-    with patch('oarc_rag.rag.rag_agent.OllamaClient') as mock_client_class:
-        mock_client = MagicMock()
-        mock_client.generate.return_value = "Python is widely used for data science."
-        mock_client_class.return_value = mock_client
-        
-        # Create agent with mocked components
-        agent = RAGAgent(
-            name="test_agent",
-            rag_engine=mock_engine
-        )
-        
-        # Test the integration
-        response = agent.process({
-            "query": "Tell me about Python",
-            "base_prompt": "Explain Python programming language"
-        })
-        
-        # Verify the integration flow worked
-        assert response == "Python is widely used for data science."
-        mock_engine.retrieve.assert_called_once()
-        mock_client.generate.assert_called_once()
-```
-
-### 10.3 Project Structure
-
-#### 10.3.1 Codebase Organization
-
-The RAG engine codebase follows a well-organized structure to ensure maintainability and clarity:
-
-```
-oarc-rag/
-├── src/
-│   └── oarc_rag/
-│       ├── __init__.py          # Package initialization
-│       ├── main.py              # Main entry point
-│       ├── cli.py               # Command-line interface
-│       ├── core/                # Core functionality
-│       │   ├── __init__.py
-│       │   ├── engine.py        # RAGEngine implementation
-│       │   ├── database.py      # Vector database
-│       │   ├── embedding.py     # Embedding generation
-│       │   ├── chunking.py      # Text chunking utilities
-│       │   ├── llama.py         # LlamaIndex integration
-│       │   ├── rag.py           # Main RAG system interface
-│       │   ├── rag_agent.py     # RAG-enhanced agents
-│       │   ├── query.py         # Query formulation
-│       │   └── monitor.py       # Performance monitoring
-│       ├── ai/
-│       │   ├── __init__.py
-│       │   ├── client.py        # Ollama client integration
-│       │   ├── prompts.py       # Prompt templates
-│       │   └── agents/          # Agent implementations
-│       │       ├── __init__.py
-│       │       ├── agent.py     # Base agent class
-│       │       ├── expansion.py # Content expansion agent
-│       │       ├── merge.py     # Content merging agent
-│       │       ├── split.py     # Content splitting agent
-│       │       └── prune.py     # Content pruning agent
-│       └── utils/
-│           ├── __init__.py
-│           ├── log.py           # Logging utilities
-│           ├── config.py        # Configuration management
-│           ├── utils.py         # General utilities
-│           ├── vector/
-│           │   ├── __init__.py
-│           │   └── operations.py # Vector math operations
-│           ├── decorators/
-│           │   ├── __init__.py
-│           │   ├── singleton.py  # Singleton pattern
-│           │   └── factory.py    # Factory pattern
-│           └── profiler.py       # Performance profiling tools
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py               # Shared test fixtures
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── engine_test.py        # RAGEngine tests
-│   │   ├── llama_test.py         # LlamaIndex integration tests
-│   │   ├── rag_agent_test.py     # RAGAgent tests
-│   │   └── monitor_test.py       # Monitoring tests
-│   ├── ai/
-│   │   ├── __init__.py
-│   │   └── agents/
-│   │       ├── __init__.py
-│   │       └── agent_test.py     # Agent tests
-│   ├── integration/
-│   │   ├── __init__.py
-│   │   └── test_workflow.py      # Integration tests
-│   ├── e2e/
-│   │   ├── __init__.py
-│   │   └── test_cli.py           # End-to-end tests
-│   └── live/
-│       ├── __init__.py
-│       └── test_ollama_live.py   # Live Ollama tests
-├── docs/
-│   ├── Specification.md          # This document
-│   └── diagrams/                 # Architecture diagrams
-│       └── system_overview.png
-├── examples/
-│   ├── basic_usage.py            # Basic usage examples
-│   └── advanced_workflows.py     # Advanced usage examples
-├── scripts/
-│   └── setup_dev_env.sh          # Development environment setup
-├── pyproject.toml                # Project metadata and dependencies
-├── README.md                     # Project overview
-└── LICENSE                       # License information
-```
-
-This structure separates concerns and promotes modularity, making it easier to navigate, maintain, and test the codebase.
-
-#### 10.3.2 Key Modules
-
-The RAG engine consists of several key modules:
-
-1. **core**: Core RAG functionality including:
-   - **engine.py**: Main RAGEngine implementation with singleton pattern
-   - **database.py**: Vector database for efficient storage and retrieval
-   - **embedding.py**: Embedding generation and processing
-   - **rag.py**: High-level RAG system interface
-   - **llama.py**: LlamaIndex integration components
-
-2. **ai**: AI integration components including:
-   - **client.py**: Ollama API client with retry capabilities
-   - **agents/**: Agent framework and specialized agent implementations
-   - **prompts.py**: Prompt templates and strategies
-
-3. **utils**: Utility functions and helpers including:
-   - **vector/**: Vector operations library with optimized implementations
-   - **decorators/**: Design pattern implementations (singleton, factory)
-   - **profiler.py**: Performance monitoring and profiling tools
-
-4. **cli.py**: Command-line interface for direct system interaction
-
-Each module maintains clear boundaries of responsibility while exposing interfaces for integration with other components. This modular design enables independent development and testing of components, while ensuring they work together seamlessly in the complete system.
+---
