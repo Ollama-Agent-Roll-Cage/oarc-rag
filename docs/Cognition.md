@@ -145,6 +145,19 @@ DegradeState(current_state):
     return current_state # No change for PROTECTIVE
 ```
 
+```mermaid
+graph TD
+    A[Operation Occurs] --> B(RecordOperation);
+    B --> C{Update Energy & Entropy};
+    C -- Energy Cost --> D[Decrease Current Energy];
+    C -- Entropy Rate --> E[Increase Current Entropy];
+    D --> F(UpdateSystemState);
+    E --> F;
+    F --> G[New System State];
+    G --> H(GetOptimizationLevel);
+    H --> I[Optimization Level (0-4)];
+```
+
 ### 2.2 System States and Phase Transitions
 
 The CRAG system operates in two fundamental phases: AWAKE and SLEEP. Within each phase, the system transitions between various states based on energy and entropy levels:
@@ -343,6 +356,21 @@ PerformLightMaintenance(intensity):
   UpdateSystemStatistics()
 ```
 
+```mermaid
+graph TD
+    A[Enter NAPPING State] --> B{Loop while duration not met};
+    B -- Check Interrupt --> C{Interrupt?};
+    C -- Yes --> D[Exit NAPPING];
+    C -- No --> E(Recover Energy);
+    E --> F(Reduce Entropy);
+    F --> G{Maintenance Delay Met?};
+    G -- Yes --> H(Perform Light Maintenance);
+    G -- No --> I(Sleep Interval);
+    H --> I;
+    I --> B;
+    B -- Duration Met --> D;
+```
+
 ### 4.2 SLOW_WAVE State
 
 The SLOW_WAVE state focuses on deep memory consolidation and system optimization:
@@ -433,106 +461,32 @@ ReduceEntropy(rate, elapsed_seconds):
   
   Log debug(f"Reduced entropy by {entropy_to_reduce:.2f}. Current: {current_entropy:.2f}/{max_entropy}")
   return current_entropy
+```
 
-# Detailed descriptions/pseudocode for complex SLOW_WAVE operations:
-OptimizePCA(chunk_size):
-  # Load a sample of embeddings if not already loaded or if model needs retraining
-  embedding_sample = vector_db.GetEmbeddingSample(config.pca_sample_size or 10000)
-  if len(embedding_sample) < config.min_pca_sample_size:
-      Log warning("Not enough embeddings to optimize PCA.")
-      return True # Mark as completed for this cycle
+```mermaid
+graph TD
+    A[Enter SLOW_WAVE State] --> B{Loop while duration not met};
+    B -- Check Interrupt --> C{Interrupt?};
+    C -- Yes --> D[Exit SLOW_WAVE];
+    C -- No --> E{Operations Left?};
+    E -- Yes --> F(Execute Operation Chunk);
+    F --> G(Record Energy/Entropy Cost);
+    E -- No --> G;
+    G --> H(Recover Energy);
+    H --> I(Reduce Entropy);
+    I --> J(Sleep Interval);
+    J --> B;
+    B -- Duration Met --> D;
 
-  # Fit PCA model based on config (target dimensions, variance threshold)
-  pca_model = FitPCA(embedding_sample, n_components=config.pca_target_dimensions, variance_threshold=config.pca_variance_threshold)
-  
-  # Check if the new model is significantly different or better than the current one
-  if ShouldUpdatePCAModel(pca_model, current_pca_model):
-      # Save the new PCA model
-      SavePCAModel(pca_model)
-      # Optionally, trigger a background task to re-transform embeddings if needed,
-      # or handle transformation lazily during retrieval.
-      Log info("PCA model updated. Dimensions:", pca_model.n_components_, "Variance:", pca_model.explained_variance_ratio_.sum())
-      global current_pca_model # Update global reference if applicable
-      current_pca_model = pca_model
-  
-  return True # Indicate completion for this cycle
-
-CleanupVectors(chunk_size):
-  # Identify vectors/chunks meeting cleanup criteria (e.g., low activation, orphaned, flagged for deletion)
-  candidates = vector_db.FindVectorsForCleanup(
-      min_activation=config.cleanup_min_activation,
-      max_age_days=config.cleanup_max_age_days,
-      status_flags=["deleted", "low_quality"],
-      limit=chunk_size
-  )
-  
-  if not candidates: return True # No candidates found in this chunk
-
-  # Perform deletion from vector index and associated storage
-  vector_ids_to_delete = [c.vector_id for c in candidates]
-  document_ids_to_delete = [c.document_id for c in candidates]
-  
-  success_vector = vector_db.DeleteVectors(vector_ids_to_delete)
-  success_docs = document_store.DeleteDocuments(document_ids_to_delete)
-  
-  # Log results
-  Log info(f"CleanupVectors: Attempted deletion of {len(candidates)} items. Vector success: {success_vector}, Doc success: {success_docs}")
-  
-  # Return False if more candidates likely exist, True if processed all likely candidates for now
-  return len(candidates) < chunk_size 
-
-OptimizeIndices(chunk_size): # chunk_size might not be directly applicable here
-  # Trigger optimization specific to the vector database implementation (e.g., HNSW)
-  # This might involve rebuilding the index, compacting data, etc.
-  # This is often a blocking operation or managed internally by the DB.
-  Log info("Starting vector index optimization...")
-  optimization_result = vector_db.OptimizeIndex(config.optimization_parameters) # Pass relevant config
-  Log info("Vector index optimization completed.", result=optimization_result)
-  
-  # Optimize Memory Graph indices if applicable (depends on implementation)
-  Log info("Starting Memory Graph index optimization...")
-  graph_optimization_result = memory_graph.OptimizeIndices()
-  Log info("Memory Graph index optimization completed.", result=graph_optimization_result)
-
-  return True # Assume completion for the cycle
-
-ClusterChunks(chunk_size):
-  # Retrieve embeddings for clustering (potentially sample or focus on recent/active ones)
-  embeddings_to_cluster, node_ids = vector_db.GetEmbeddingsForClustering(limit=chunk_size * 10) # Get more to form clusters
-  if len(embeddings_to_cluster) < config.min_clustering_size:
-      return True # Not enough data
-
-  # Perform clustering (e.g., K-Means, DBSCAN)
-  clustering_algorithm = GetClusteringAlgorithm(config.clustering_method)
-  cluster_labels = clustering_algorithm.fit_predict(embeddings_to_cluster)
-
-  # Update Experience Graph: Create/update cluster nodes and link chunks
-  for i, node_id in enumerate(node_ids):
-      cluster_id = cluster_labels[i]
-      if cluster_id != -1: # Ignore noise points if using DBSCAN etc.
-          experience_graph.AssignNodeToCluster(node_id, cluster_id)
-  
-  # Optionally generate summaries for new/updated clusters
-  UpdateClusterSummaries(new_or_updated_cluster_ids)
-
-  Log info(f"Clustering performed on {len(node_ids)} items. Found {max(cluster_labels)+1} clusters.")
-  # Return False if more data needs clustering, True otherwise
-  return len(embeddings_to_cluster) < chunk_size * 10 
-
-MemoryGraphMaintenance(chunk_size): # chunk_size might control batch size for operations
-  # Calls the detailed maintenance function defined in Section 5.2.3
-  Log info("Starting Memory Graph Maintenance...")
-  maintenance_result = PerformMemoryGraphMaintenanceInternal(chunk_size, config) # Pass config/batch size
-  Log info("Memory Graph Maintenance completed.", result=maintenance_result)
-  return True # Assume completion for the cycle
-
-PerformDataVerificationTasks(chunk_size):
-  # Calls the detailed verification logic defined in Enrichment.md, Section 4.3
-  Log info("Starting Data Verification Tasks...")
-  verification_result = ExecuteSlowWaveVerificationTask(chunk_size, config, tools) # Pass tools/config
-  Log info("Data Verification Tasks completed.", result=verification_result)
-  # Return False if more items need verification, True otherwise
-  return verification_result.get("processed_count", 0) < chunk_size 
+    subgraph Operations
+        Op1[Optimize PCA]
+        Op2[Cleanup Vectors]
+        Op3[Optimize Indices]
+        Op4[Cluster Chunks]
+        Op5[Memory Graph Maintenance]
+        Op6[Data Verification]
+    end
+    F --> Op1 --> Op2 --> Op3 --> Op4 --> Op5 --> Op6
 ```
 
 ### 4.3 REM State
@@ -602,16 +556,33 @@ PerformREMSleep(duration, config):
       RecoverEnergy(recovery_rate, final_elapsed)
       ReduceEntropy(entropy_reduction_rate, final_elapsed)
       UpdateSystemState()
+```
 
+```mermaid
+graph TD
+    A[Enter REM State] --> B{Loop while duration not met};
+    B -- Check Interrupt --> C{Interrupt?};
+    C -- Yes --> D[Exit REM];
+    C -- No --> E{Operations Left?};
+    E -- Yes --> F(Execute Operation Chunk);
+    F --> G(Record Energy/Entropy Cost);
+    E -- No --> G;
+    G --> H(Recover Energy);
+    H --> I(Reduce Entropy);
+    I --> J(Sleep Interval);
+    J --> B;
+    B -- Duration Met --> D;
 
-# Placeholder descriptions for complex REM operations:
-# IdentifyConceptClusters: Analyzes Experience Graph for densely connected subgraphs.
-# FindAndCreateDistantConnections: Uses similarity search and graph traversal to find related but unconnected nodes, potentially creating new edges.
-# GenerateAbstractions: Summarizes clusters or patterns into new, higher-level nodes in Experience Graph.
-# PerformExternalEnrichmentLookups: Uses tools (crawlers, search APIs) to find related external info for selected concepts, as detailed in Enrichment.md.
-# PerformInternalCrossReferencing: Searches internal data for connections to selected concepts, potentially creating new graph edges, as detailed in Enrichment.md.
-# UpdateMemoryFromExperience: Calls the Knowledge Bridge function (See 5.3.2).
-# ProcessScheduledREMTasks: Executes tasks queued specifically for REM, like error pattern analysis.
+    subgraph Operations
+        Op1[Identify Clusters]
+        Op2[Find/Create Connections]
+        Op3[Generate Abstractions]
+        Op4[External Enrichment]
+        Op5[Internal Cross-Ref]
+        Op6[Update Memory Graph (Bridge)]
+        Op7[Process Scheduled Tasks]
+    end
+    F --> Op1 --> Op2 --> Op3 --> Op4 --> Op5 --> Op6 --> Op7
 ```
 
 ### 4.4 RECOVERY State
@@ -632,6 +603,14 @@ PerformRecoverySleep(duration):
   PerformRapidEnergyRecovery(duration × 0.4)
   PerformCriticalRepairs(duration × 0.3)
   PerformEntropyReduction(duration × 0.3)
+```
+
+```mermaid
+graph TD
+    A[Enter RECOVERY State] --> B(Phase 1: Rapid Energy Recovery);
+    B --> C(Phase 2: Critical System Repairs);
+    C --> D(Phase 3: Entropy Reduction);
+    D --> E[Exit RECOVERY];
 ```
 
 ### 4.5 Sleep Scheduling and Transition
@@ -704,6 +683,29 @@ ExecuteSleepCycle(stage, duration, config):
       Log info("Waking up from sleep stage:", stage, "Final State:", system_state)
 ```
 
+```mermaid
+graph TD
+    A[Check Sleep Trigger Conditions] --> B{Should Sleep?};
+    B -- No --> C[Remain AWAKE];
+    B -- Yes --> D(Get Current State & Entropy);
+    D --> E{State == PROTECTIVE?};
+    E -- Yes --> F[Stage = RECOVERY];
+    E -- No --> G{State == CRITICAL?};
+    G -- Yes --> H[Stage = SLOW_WAVE];
+    G -- No --> I{State == OVERTIRED?};
+    I -- Yes --> J{Entropy > Threshold?};
+    J -- Yes --> K[Stage = REM];
+    J -- No --> L[Stage = SLOW_WAVE];
+    I -- No --> M[Stage = NAPPING];
+    F --> N(Determine Duration);
+    H --> N;
+    K --> N;
+    L --> N;
+    M --> N;
+    N --> O(ExecuteSleepCycle);
+    O --> P[Return to AWAKE];
+```
+
 ## 5. Dual-Graph Memory Architecture
 
 The Cognitive RAG system implements a dual-graph memory architecture inspired by human memory models. This approach combines:
@@ -755,6 +757,26 @@ Cluster {
     summary_node_id: Optional<UUID>, // ID of node containing cluster summary
     metadata: Map<String, Any>     // Creation time, updates, etc.
 }
+```
+
+```mermaid
+graph LR
+    subgraph Experience Graph Example
+        N1(Node 1<br/>Type: CHUNK<br/>Content: "Paris is...") --- E1 --- N2(Node 2<br/>Type: CHUNK<br/>Content: "Eiffel Tower...");
+        N2 --- E2 --- N3(Node 3<br/>Type: QUERY<br/>Content: "Where is Eiffel Tower?");
+        N3 --- E3 --- N4(Node 4<br/>Type: RESPONSE<br/>Content: "In Paris...");
+        N1 --- E4 --- N4;
+        N2 --- E5 --- N4;
+        N5(Node 5<br/>Type: ABSTRACTION<br/>Content: "Paris Landmarks") --- E6 --- N1;
+        N5 --- E7 --- N2;
+    end
+    E1((Edge<br/>Type: SEMANTIC<br/>Weight: 0.8));
+    E2((Edge<br/>Type: SEMANTIC<br/>Weight: 0.9));
+    E3((Edge<br/>Type: QUERY_RESPONSE));
+    E4((Edge<br/>Type: SEMANTIC<br/>Weight: 0.7));
+    E5((Edge<br/>Type: SEMANTIC<br/>Weight: 0.95));
+    E6((Edge<br/>Type: ABSTRACTION));
+    E7((Edge<br/>Type: ABSTRACTION));
 ```
 
 #### 5.1.2 Experience Graph Operations
@@ -946,6 +968,18 @@ Relationship {
     confidence: Float,             // Confidence score (0.0-1.0)
     metadata: Map<String, Any>     // Source, timestamp, etc.
 }
+```
+
+```mermaid
+graph LR
+    subgraph Memory Graph Example
+        E1(Entity 1<br/>Name: Eiffel Tower<br/>Type: Landmark) -- R1 -- E2(Entity 2<br/>Name: Paris<br/>Type: City);
+        E1 -- R2 -- E3(Entity 3<br/>Name: Gustave Eiffel<br/>Type: Person);
+        E2 -- R3 -- E4(Entity 4<br/>Name: France<br/>Type: Country);
+    end
+    R1((Relationship<br/>Predicate: located_in));
+    R2((Relationship<br/>Predicate: designed_by));
+    R3((Relationship<br/>Predicate: capital_of));
 ```
 
 #### 5.2.2 Memory Graph Operations
@@ -1409,6 +1443,24 @@ CrossReferenceResults(primary_results, secondary_results, query_analysis):
   return enriched_results
 ```
 
+```mermaid
+graph TD
+    A[Query] --> B(Analyze Query);
+    B --> C{Is Factual?};
+    C -- Yes --> D(Search Memory Graph - Primary);
+    C -- No --> E(Search Experience Graph - Primary);
+    D --> F(Search Experience Graph - Secondary);
+    E --> G(Search Memory Graph - Secondary);
+    F --> H(Cross-Reference Results);
+    G --> H;
+    H --> I{Need More Context?};
+    I -- Yes --> J(Perform Graph Traversal);
+    J --> K(Merge Results);
+    I -- No --> K;
+    K --> L(Rank & Format);
+    L --> M[Final Results];
+```
+
 #### 5.3.2 Knowledge Bridge Mechanism
 
 The Knowledge Bridge Mechanism transfers information between the Experience and Memory Graphs, particularly during REM sleep. It extracts structured knowledge from experience patterns and helps form new associations based on structured facts.
@@ -1608,6 +1660,19 @@ ExtractStructuredKnowledge(pattern, extraction_method):
   
   // Filter and deduplicate
   return FilterAndDeduplicate(structured_knowledge)
+```
+
+```mermaid
+graph TD
+    A[Trigger Knowledge Bridge (REM Sleep)] --> B{Direction?};
+    B -- EG to MG --> C(Find Significant Patterns in EG);
+    C --> D(Extract Structured Knowledge);
+    D --> E(Add/Update Entities/Relationships in MG);
+    B -- MG to EG --> F(Find EG Nodes with MG Entities);
+    F --> G(Identify Related EG Nodes via MG Relationships);
+    G --> H(Create/Strengthen Edges or Abstractions in EG);
+    E --> I[Bridge Complete];
+    H --> I;
 ```
 
 ### 5.4 Memory Graph vs Experience Graph Comparison
@@ -1842,6 +1907,22 @@ HandleOperationError(operation, error, cognitive_system):
   return GetErrorResponse(operation, error, system_state)
 ```
 
+```mermaid
+graph TD
+    A[Operation Error Occurs] --> B(Record Error Context);
+    B --> C{Get Current System State};
+    C --> D{State?};
+    D -- OPTIMAL --> E(Attempt Immediate Recovery);
+    D -- FATIGUED --> F{Is Operation Critical?};
+    F -- Yes --> E;
+    F -- No --> G(Defer Recovery / Log Only);
+    D -- OVERTIRED/CRITICAL --> G;
+    D -- PROTECTIVE --> H(Schedule Recovery for SLEEP);
+    E --> I[Return Response];
+    G --> I;
+    H --> I;
+```
+
 ### 9.2 Sleep Cycle Integration for Error Recovery
 
 The error handling system integrates with sleep cycles for deferred recovery:
@@ -1881,6 +1962,20 @@ ProcessErrorRecoveryTasks(sleep_stage, cognitive_system):
     escalated: CountEscalatedTasks(recovery_tasks),
     unresolvable: CountUnresolvableTasks(recovery_tasks)
   }
+```
+
+```mermaid
+graph TD
+    A[Enter Sleep Cycle] --> B(Get Scheduled Error Tasks for Stage);
+    B --> C{Tasks Found?};
+    C -- No --> D[Continue Normal Sleep];
+    C -- Yes --> E(Group Tasks by Error Type);
+    E --> F{Loop Through Groups};
+    F -- Next Group --> G(Determine Recovery Strategy);
+    G --> H(Attempt Recovery Action);
+    H --> I(Log Outcome);
+    I --> F;
+    F -- Done --> D;
 ```
 
 ### 9.3 Experience Graph Error Learning
@@ -1956,6 +2051,19 @@ MonitorAbnormalEnergyUsage(cognitive_system):
     // If severe, trigger protective sleep
     if NeedsDefensiveMeasures(suspicious_operations):
       cognitive_system.ForceProtectiveMode("security_trigger")
+```
+
+```mermaid
+graph TD
+    A[Monitor Energy Usage] --> B(Get Recent Usage Pattern);
+    B --> C{Detect Abnormal Drain?};
+    C -- No --> A;
+    C -- Yes --> D(Identify Source Operations/Requests);
+    D --> E(Log Potential Attack/Issue);
+    E --> F{Apply Mitigation?};
+    F -- Yes --> G(Throttle Source / Enter PROTECTIVE);
+    F -- No --> A;
+    G --> A;
 ```
 
 ### 10.2 Memory Graph Security

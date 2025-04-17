@@ -40,12 +40,7 @@ This document provides a comprehensive architecture, specification, and implemen
       - [2.13.3.3 Dual-Graph Integration](#21333-dual-graph-integration)
   - [2.14 System Dependencies](#214-system-dependencies)
     - [2.14.1 Core Dependencies](#2141-core-dependencies)
-    - [2.14.2 LLM Integration Dependencies](#2142-llm-integration-dependencies)
-    - [2.14.3 Visualization Dependencies](#2143-visualization-dependencies)
-    - [2.14.4 Performance Dependencies](#2144-performance-dependencies)
-    - [2.14.5 Testing Dependencies](#2145-testing-dependencies)
-    - [2.14.6 Optional Dependencies](#2146-optional-dependencies)
-  - [2.15 Error Handling & Recovery](#215-error-handling--recovery)
+      - [2.15 Error Handling & Recovery](#215-error-handling--recovery)
   - [2.16 Security Considerations](#216-security-considerations)
     - [2.16.1 Internal Data Security](#2161-internal-data-security)
 - [3. Implementation Plan](#3-implementation-plan)
@@ -74,27 +69,95 @@ This document provides a comprehensive architecture, specification, and implemen
 
 The RAG engine represents a next-generation approach to information retrieval and generation, specifically engineered for real-time processing while maintaining continuous self-improvement capabilities. The system delivers several cornerstone features:
 
-- **Dynamic Embedding Generation:** Leverages optimized Large Language Models (LLMs) to transform text into sophisticated high-dimensional vector representations (1024+ dimensions), capturing nuanced semantic meaning beyond keywords.
-
-- **Efficient Similarity Search:** Implements production-grade Approximate Nearest Neighbor (ANN) techniques using Hierarchical Navigable Small World (HNSW) graph structures, enabling sub-millisecond retrieval even with millions of vectors.
-
-- **Recursive Data Enhancement:** Deploys an ecosystem of specialized intelligent agents that systematically expand, refine, merge, split, and prune content blocks, creating a self-improving knowledge base that evolves with usage patterns.
-
-- **Pandas-based Query Engine:** Incorporates a lightweight, high-performance query processing system built on Pandas dataframes, enabling rapid filtering, joining, and transformation operations on retrieved content.
-
-- **Multi-Threaded FastAPI Backend:** Provides a modern, fully concurrent service layer capable of handling hundreds of simultaneous queries, agent operations, and real-time WebSocket update streams.
-
-- **Real-Time Visualization:** Features a dedicated visualization application for knowledge graph exploration with dynamic zooming, panning, node selection, and real-time highlighting of information pathways.
-
-- **Cognitive System (CRAG):** Incorporates a biologically-inspired self-regulatory framework with computational analogs to energy management, sleep cycles for maintenance, and a dual-graph memory architecture reflecting human memory consolidation processes.
+| Feature                         | Description                                                                                                                                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dynamic Embedding Generation**  | Leverages optimized Large Language Models (LLMs) to transform text into sophisticated high-dimensional vector representations (1024+ dimensions), capturing nuanced semantic meaning beyond keywords. |
+| **Efficient Similarity Search**   | Implements production-grade Approximate Nearest Neighbor (ANN) techniques using Hierarchical Navigable Small World (HNSW) graph structures, enabling sub-millisecond retrieval even with millions of vectors. |
+| **Recursive Data Enhancement**    | Deploys an ecosystem of specialized intelligent agents that systematically expand, refine, merge, split, and prune content blocks, creating a self-improving knowledge base that evolves with usage patterns. |
+| **Pandas-based Query Engine**     | Incorporates a lightweight, high-performance query processing system built on Pandas dataframes, enabling rapid filtering, joining, and transformation operations on retrieved content.             |
+| **Multi-Threaded FastAPI Backend** | Provides a modern, fully concurrent service layer capable of handling hundreds of simultaneous queries, agent operations, and real-time WebSocket update streams.                                  |
+| **Real-Time Visualization**       | Features a dedicated visualization application for knowledge graph exploration with dynamic zooming, panning, node selection, and real-time highlighting of information pathways.                    |
+| **Cognitive System (CRAG)**       | Incorporates a biologically-inspired self-regulatory framework with computational analogs to energy management, sleep cycles for maintenance, and a dual-graph memory architecture reflecting human memory consolidation processes. |
 
 ---
 
 ## 2. System Architecture
 
+```mermaid
+graph LR
+    subgraph User Interaction
+        API[API & Concurrency (FastAPI)]
+        Vis[Visualization Module]
+    end
+
+    subgraph Core Engine
+        CRAG[Cognitive System (CRAG)]
+        Agents[Agentic Framework]
+        Search[Similarity Search (HNSW)]
+        Embed[Embedding & Processing]
+        Store[Data Storage (Vector DB, Metadata)]
+    end
+
+    subgraph Data Flow
+        Acquire[Data Acquisition (oarc-crawlers)]
+        Process[Document Processing Pipeline]
+        Enrich[Data Enrichment (Sleep Cycles)]
+    end
+
+    subgraph Monitoring
+        Monitor[Performance Monitoring]
+        Cache[Multi-Level Caching]
+    end
+
+    API --> CRAG
+    API --> Search
+    API --> Agents
+    Vis --> Store
+    Vis --> CRAG
+
+    CRAG -- Manages --> Agents
+    CRAG -- Manages --> Search
+    CRAG -- Manages --> Embed
+    CRAG -- Manages --> Process
+    CRAG -- Manages --> Enrich
+    CRAG -- Uses --> Store
+    CRAG -- Uses --> Monitor
+    CRAG -- Uses --> Cache
+
+    Agents -- Interact --> Store
+    Agents -- Trigger --> Enrich
+    Search -- Uses --> Store
+    Embed -- Uses --> Store
+
+    Acquire --> Process
+    Process --> Embed
+    Process --> Store
+    Enrich -- Uses --> Store
+    Enrich -- Uses --> Agents
+
+    Monitor -- Observes --> API
+    Monitor -- Observes --> CRAG
+    Monitor -- Observes --> Agents
+    Monitor -- Observes --> Search
+    Monitor -- Observes --> Store
+
+    Cache -- Supports --> API
+    Cache -- Supports --> Search
+    Cache -- Supports --> Embed
+```
+
 ### 2.1 Embedding & Data Processing
 
 The Embedding and Data Processing system forms the foundation of semantic understanding by transforming natural language into mathematical vector spaces. This crucial component serves as the bridge between human language and machine-processable representations, enabling meaningful similarity comparisons. The system incorporates memory-efficient batching strategies, intelligent caching of frequently embedded texts, and configurable dimensionality reduction techniques to optimize the performance-accuracy tradeoff.
+
+```mermaid
+graph LR
+    A[Raw Text/Data] --> B(Chunking);
+    B --> C(Embedding Model);
+    C --> D(Vector Embedding);
+    D --> E{Vector Database};
+    D --> F(Optional: Experience Graph);
+```
 
 ### 2.2 Similarity Search via ANN/HNSW
 
@@ -124,7 +187,15 @@ SearchHNSW(query_vector, index, top_k=5, ef_search=100):
   return results
 ```
 
-### 2.2.1 Vector Operations
+```mermaid
+graph LR
+    A[Query Text] --> B(Generate Query Embedding);
+    B --> C{HNSW Index};
+    C -- Search (ef_search) --> D[Retrieve Top-K IDs & Distances];
+    D --> E(Rank Results);
+```
+
+#### 2.2.1 Vector Operations
 
 The Vector Operations subsystem implements fundamental mathematical functions for working with embeddings. These operations form the mathematical foundation for all similarity calculations and vector manipulations throughout the system. Efficient implementations of these operations are critical for system performance, as they are executed millions of times during normal operation. The system includes specialized functions for vector normalization, similarity calculation, and batch processing to maximize computational efficiency.
 
@@ -154,7 +225,7 @@ BatchSimilarity(query_vector, candidate_vectors):
   return similarities
 ```
 
-### 2.2.2 PCA-Based Indexing Optimization
+#### 2.2.2 PCA-Based Indexing Optimization
 
 The PCA-Based Indexing Optimization system enhances search performance by reducing the dimensionality of embedding vectors while preserving their semantic relationships. Principal Component Analysis (PCA) identifies the most informative dimensions in the embedding space, allowing the system to represent vectors with fewer dimensions while retaining most of their semantic information. This optimization creates a two-tier search architecture where initial candidate selection uses reduced vectors for speed, followed by precise re-ranking with full vectors for accuracy.
 
@@ -183,6 +254,14 @@ OptimizePCAIndex(embeddings, target_dimensions=128, variance_threshold=0.9):
     variance_preserved: cumulative_variance,
     dimensions: target_dimensions
   }
+```
+
+```mermaid
+graph LR
+    A[Original Embeddings] --> B(Fit PCA Model);
+    B -- Transformation --> C[Reduced Dimension Embeddings];
+    C --> D{Optimized Index (e.g., HNSW on reduced vectors)};
+    A --> E{Original Vector Store (for re-ranking)};
 ```
 
 ### 2.3 Recursive Agent Operations
@@ -221,6 +300,18 @@ CoordinateAgents(cognitive_system, document_store, agents):
   return results
 ```
 
+```mermaid
+graph LR
+    A[Trigger (e.g., CRAG state, schedule)] --> B(Agent Coordinator);
+    B -- Get State --> C{CRAG Cognitive System};
+    B -- Prioritize Agents --> D[Agent Queue];
+    D -- Select Agent --> E(Check Energy Requirement);
+    E -- Sufficient Energy --> F(Execute Agent);
+    F -- Update --> G{Data Storage};
+    F -- Record Completion --> C;
+    E -- Insufficient Energy --> H(Defer Agent);
+```
+
 ### 2.4 Data Storage and Query Layer
 
 The Data Storage and Query Layer provides the persistent backbone for the RAG engine, managing both the high-dimensional vector embeddings and their associated metadata. It integrates a high-performance vector database system optimized for large-scale similarity search and retrieval operations, alongside mechanisms for querying and managing the textual content and metadata linked to these vectors. This layer ensures data integrity, consistency, and efficient access for both retrieval and agent-based refinement processes.
@@ -236,6 +327,17 @@ The Database Schema defines the logical structure for storing embeddings, origin
 ### 2.5 API & Concurrency
 
 The API & Concurrency module provides a robust, high-performance service layer built using FastAPI, enabling interaction with the RAG engine's capabilities. It supports asynchronous request handling for high concurrency, offering RESTful endpoints for core functions like embedding generation, similarity search, document ingestion, and agent operations. Additionally, it may utilize WebSocket streams for real-time updates, such as monitoring agent progress or receiving notifications about system state changes from the CRAG component.
+
+```mermaid
+graph TD
+    A[Client Request] --> B{FastAPI Endpoint};
+    B -- Async Handling --> C(CRAG State Check);
+    C -- OK --> D(Perform RAG Operation);
+    D --> E[Format Response];
+    E --> F[Client Response];
+    C -- Busy/Protect --> G[Return Throttled/Error Response];
+    G --> F;
+```
 
 ### 2.6 Visualization Module
 
@@ -312,6 +414,19 @@ MonitorCrawlerOutput(data_dir, interval, queue, processed_ids):
     Sleep(interval)
 ```
 
+```mermaid
+graph TD
+    A[Trigger Crawl (Config/Agent)] --> B(ResourceCollector: TriggerCrawlingJob);
+    B --> C(oarc-crawlers: StartJob);
+    C -- Async Crawl --> D(External Source);
+    D --> E(oarc-crawlers: Save to Parquet);
+    E --> F[Parquet Files in Output Dir];
+    G(ResourceCollector: MonitorCrawlerOutput) -- Scans --> F;
+    G -- New File Found --> H{Check if Processed};
+    H -- No --> I(Enqueue for Document Processing);
+    H -- Yes --> G;
+```
+
 ### 2.8 Performance Monitoring
 
 The Performance Monitoring module continuously tracks key system metrics to ensure operational health and efficiency. It gathers data points such as query latency (end-to-end and component-specific), agent operation durations, resource utilization (CPU, memory, disk I/O, network), cache hit/miss rates, and CRAG energy/entropy levels. This data is exposed through dashboards (e.g., using Grafana) and can trigger alerts based on predefined thresholds, enabling proactive identification of bottlenecks or potential issues.
@@ -320,41 +435,50 @@ The Performance Monitoring module continuously tracks key system metrics to ensu
 
 The Multi-Level Caching System significantly improves performance and reduces redundant computations by storing frequently accessed data closer to the point of use. It may include in-memory caches (e.g., using Redis or Python dictionaries) for embedding results, query results, and intermediate agent outputs. It employs intelligent strategies for cache invalidation (e.g., time-to-live, event-based) and prioritization (e.g., LRU - Least Recently Used) to maximize cache hit rates and overall system efficiency, adapting cache behavior based on CRAG's energy state.
 
+```mermaid
+graph TD
+    A[Request] --> B{Cache Check};
+    B -- Hit --> C[Return Cached Data];
+    B -- Miss --> D(Execute Operation);
+    D --> E{Update Cache};
+    E --> F[Return Data];
+    C --> G[Response];
+    F --> G;
+```
+
 ### 2.10 Design Patterns
 
 The system architecture leverages established software design patterns to promote modularity, flexibility, scalability, and maintainability, ensuring a robust and extensible codebase.
-
-#### 2.10.1 Singleton Pattern
-
-The Singleton Pattern ensures that certain resource-intensive or stateful components, such as the connection pool to the vector database, the central configuration manager, or the CRAG cognitive model instance, are instantiated only once per application lifecycle. This prevents resource contention, ensures consistent state management, and optimizes memory usage.
-
-#### 2.10.2 Factory Pattern
-
-The Factory Pattern is employed to abstract the creation logic for various objects, particularly for components like agents or data processors where different implementations might exist. It allows the system to dynamically create instances of specific agent types (e.g., `ExpansionAgent`, `RefinementAgent`) or document processors based on configuration or runtime conditions, promoting loose coupling and easier extension.
-
-#### 2.10.3 Combined Usage
-
-The strategic combination of design patterns like Singleton, Factory, Observer (for event handling), and Strategy (for varying algorithms like chunking or embedding) enables the system to achieve a balance between flexibility, efficiency, and maintainability. For instance, a Factory might produce Singleton instances, or different Strategy implementations might be managed as Singletons.
 
 ### 2.11 Agentic Framework
 
 The Agentic Framework provides the structure and coordination mechanism for the specialized AI agents responsible for recursive data enhancement and other autonomous tasks within the system.
 
-#### 2.11.1 Agent Architecture
-
-The Agent Architecture defines a standardized structure and interface for all agents. This typically includes methods for initialization (`__init__`), execution (`execute` or `run`), state management, communication with other agents or system components (like the document store or CRAG), and reporting results or errors. It ensures consistency and facilitates the integration of new agents.
-
-#### 2.11.2 Agent Types
-
-The system includes a diverse set of specialized agent types, each designed for a specific task in the data refinement lifecycle. Examples include `ExpansionAgent` (adds context), `RefinementAgent` (improves clarity/accuracy), `MergingAgent` (combines related chunks), `SplittingAgent` (divides mixed-topic chunks), `PruningAgent` (removes irrelevant/outdated info), and potentially agents for summarization, entity linking, or quality assessment.
-
-#### 2.11.3 Agent Collaboration Model
-
-The Agent Collaboration Model defines how agents interact, coordinate their actions, and share information to achieve collective goals, orchestrated by the `AgentCoordinator` (Section 2.3). This might involve direct communication, shared state management, or a blackboard system. The model ensures agents work synergistically, avoiding conflicts and leveraging each other's outputs, often guided by priorities set by the CRAG system's state.
+```mermaid
+graph TD
+    A[Agent Coordinator] --> B(Base Agent Interface);
+    B --> C[Expansion Agent];
+    B --> D[Refinement Agent];
+    B --> E[Merging Agent];
+    B --> F[... Other Agents];
+    A -- Manages --> C;
+    A -- Manages --> D;
+    A -- Manages --> E;
+    A -- Manages --> F;
+```
 
 ### 2.12 Data Acquisition System
 
 The Data Acquisition System encompasses the end-to-end process of gathering external information and preparing it for integration into the RAG engine's knowledge base. This system clearly differentiates between three distinct stages in the information flow:
+
+```mermaid
+graph LR
+    A[1. Data Acquisition<br/>(oarc-crawlers)] --> B[2. Document Processing<br/>(Pipeline: Normalize, Chunk, etc.)];
+    B --> C[3. Data Enrichment<br/>(Sleep Cycles: Verify, Synthesize)];
+    A -- Raw Data (Parquet) --> B;
+    B -- Processed Chunks --> C;
+    C -- Enriched Knowledge --> D{Vector DB / Graphs};
+```
 
 1. **Data Acquisition**: The initial gathering of raw, multimodal data from external sources via the `ResourceCollector` component, which coordinates the `oarc-crawlers` package to fetch and save content to Parquet files during the AWAKE state.
 
@@ -444,6 +568,16 @@ The core functionality for fetching and extracting data from external web source
 - **Specialized Crawlers:** Modules tailored for specific platforms like YouTube (video metadata, captions, potentially video download), GitHub (repositories, code files, issues), ArXiv (papers, metadata, LaTeX source), and DuckDuckGo (search results).
 - **Standardized Output:** Crawlers save their output consistently, typically using `ParquetStorage`, making it easy for the `ResourceCollector` to monitor and process.
 
+```mermaid
+graph LR
+    A[Load Data (from Parquet)] --> B(Normalization);
+    B --> C(Multimodal Processing);
+    C --> D(Metadata Enrichment);
+    D --> E(Chunking);
+    E --> F(Feature Extraction);
+    F --> G[Output: Processed Chunks];
+```
+
 The RAG engine's `ResourceCollector` component coordinates these crawlers, initiating jobs and monitoring the output directory, but the heavy lifting of interacting with external sources is encapsulated within `oarc-crawlers`.
 
 **(See `docs/Enrichment.md`, Section 2.3, for more details on `oarc-crawlers` functionality.)**
@@ -498,6 +632,34 @@ The Cognitive System Integration (CRAG) embeds biologically-inspired self-regula
 
 3. **Dual-Graph Memory Architecture**: Combines associative pattern learning (Experience Graph) with structured knowledge representation (Memory Graph) to enhance retrieval and reasoning capabilities.
 
+```mermaid
+graph TD
+    subgraph CRAG Core
+        A[Energy & Entropy Model]
+        B[Sleep Cycle Manager]
+        C[Dual-Graph Memory]
+    end
+    subgraph RAG Engine
+        D[API Layer]
+        E[Search Module]
+        F[Agent Framework]
+        G[Processing Pipeline]
+    end
+    A -- Provides State --> B;
+    A -- Provides State --> D;
+    A -- Provides State --> E;
+    A -- Provides State --> F;
+    A -- Provides State --> G;
+    B -- Triggers --> F;
+    B -- Triggers --> G;
+    B -- Triggers --> C;
+    C -- Enhances --> E;
+    D -- Consumes Energy --> A;
+    E -- Consumes Energy --> A;
+    F -- Consumes Energy --> A;
+    G -- Consumes Energy --> A;
+```
+
 This biomimetic approach enables the system to adapt to varying workloads, prioritize operations based on resource availability, perform continuous knowledge organization and enrichment, and maintain long-term system health through automated maintenance cycles.
 
 **(See `Cognition.md` for comprehensive technical specifications of the CRAG components.)**
@@ -549,6 +711,16 @@ GetOptimizationLevel():
     PROTECTIVE: return 4
 ```
 
+```mermaid
+graph LR
+    A[Operation Occurs] --> B(RecordOperation);
+    B --> C{Update Energy & Entropy};
+    C --> D(UpdateSystemState);
+    D --> E[New System State (e.g., OPTIMAL, FATIGUED)];
+    E --> F(GetOptimizationLevel);
+    F --> G[Optimization Level (0-4)];
+```
+
 #### 2.13.2 Sleep Cycles
 
 The Sleep Cycles module schedules maintenance periods to optimize system performance and reduce entropy. Each sleep stage serves distinct purposes for cognitive maintenance:
@@ -569,11 +741,18 @@ The sleep scheduling logic determines which sleep stage to enter based on the cu
 
 The Dual-Graph Memory System combines associative and structured knowledge representation for enhanced retrieval and reasoning capabilities. This architecture features two complementary memory structures:
 
+```mermaid
+graph TD
+    A[Dual-Graph System] --> B(Experience Graph<br/>Associative, Episodic);
+    A --> C(Memory Graph<br/>Structured, Semantic);
+    A --> D(Knowledge Bridge<br/>Transfer Mechanism);
+    B <-.-> D;
+    C <-.-> D;
+```
+
 ##### 2.13.3.1 Memory Graph
 
 The Memory Graph provides structured knowledge representation through a semantic network of entities and typed relationships. Unlike vector embeddings that capture similarity through proximity in vector space, the Memory Graph explicitly models knowledge as triples (subject-predicate-object) with defined relationship types. It supports operations such as entity and relationship management, path-based querying, and logical inference. This explicit representation enables precise factual recall, ontological reasoning, and structured knowledge extraction that complements the pattern-matching strengths of vector embeddings.
-
-**(Detailed algorithms for Memory Graph operations like `AddEntity`, `AddRelationship`, and `Query` are specified in `Cognition.md`, Section 5.2.2.)**
 
 ##### 2.13.3.2 Memory Graph vs. Experience Graph
 
@@ -632,6 +811,17 @@ EnhancedDualGraphRetrieval(query, search_config):
   return final_results
 ```
 
+```mermaid
+graph LR
+    A[Query] --> B(Analyze Query<br/>Extract Entities, Intent);
+    B -- Factual? --> C{Search Memory Graph};
+    B -- Experiential? --> D{Search Experience Graph};
+    C --> E(Cross-Reference Results);
+    D --> E;
+    E --> F(Rank & Combine);
+    F --> G[Final Results];
+```
+
 ### 2.14 System Dependencies
 
 The System Dependencies section outlines the required libraries and frameworks for the RAG engine.
@@ -650,26 +840,6 @@ Core dependencies include libraries for embedding generation, similarity search,
 - `sentence-transformers` or similar: For generating embeddings.
 - `nltk` or `spacy`: For text processing (tokenization, entity extraction).
 
-#### 2.14.2 LLM Integration Dependencies
-
-LLM integration dependencies provide the necessary libraries to interact with Large Language Models for tasks like embedding generation, text summarization, or agentic reasoning. Examples include `transformers` (Hugging Face), `openai`, `anthropic`, or specific libraries for chosen embedding models like `sentence-transformers`.
-
-#### 2.14.3 Visualization Dependencies
-
-Visualization dependencies include libraries required for rendering interactive graphs and user interfaces, primarily for the Visualization Module (Section 2.6). This might involve JavaScript libraries like `D3.js`, `vis.js`, or Python libraries like `Plotly Dash` or `Streamlit` if the visualization is served via Python.
-
-#### 2.14.4 Performance Dependencies
-
-Performance dependencies include libraries specifically aimed at optimizing system speed, memory usage, or concurrency. Examples could be `Numba` (for JIT compilation of Python code), `Cython` (for C extensions), or optimized numerical libraries beyond `numpy`.
-
-#### 2.14.5 Testing Dependencies
-
-Testing dependencies encompass the frameworks and libraries used to ensure system reliability, correctness, and compliance through automated testing. Common examples include `pytest` (for writing and running tests), `pytest-asyncio` (for testing async code), `coverage` (for measuring test coverage), and `hypothesis` (for property-based testing).
-
-#### 2.14.6 Optional Dependencies
-
-Optional dependencies provide additional, non-essential features or integrations, such as advanced analytics connectors, specific file format parsers (beyond core needs), or experimental features. These are typically installed separately to keep the core installation lightweight.
-
 ### 2.15 Error Handling & Recovery
 
 The Error Handling & Recovery module implements robust mechanisms to gracefully manage exceptions, log errors effectively, and attempt automated recovery where feasible. It ensures system resilience by catching errors at various layers, providing informative logging for debugging, and potentially integrating with the CRAG system (as detailed in `Cognition.md`) for energy-aware retry strategies or deferring recovery actions to sleep cycles.
@@ -678,9 +848,7 @@ The Error Handling & Recovery module implements robust mechanisms to gracefully 
 
 The Security Considerations section outlines measures taken to protect the system's data, ensure operational integrity, and prevent unauthorized access or misuse throughout the architecture.
 
-#### 2.16.1 Internal Data Security
-
-Internal Data Security focuses on protecting data within the system's boundaries. Measures include encryption at rest (for vector databases and stored documents), encryption in transit (for internal API communication), role-based access control (RBAC) for accessing sensitive data or operations, secure handling of API keys/credentials, and audit logging to track significant actions or access attempts.
+---
 
 ## 3. Implementation Plan
 
@@ -745,37 +913,19 @@ Phase 6 integrates the CRAG components (Energy/Entropy Management, Sleep Cycles,
 
 The Testing & Validation section describes the comprehensive strategy to ensure the RAG engine is reliable, performs correctly, and meets specified requirements.
 
-### 4.1 Test Methodology
-
-The Test Methodology outlines the overall approach, including unit tests (for individual functions/classes), integration tests (for interactions between components like API-Search-DB), end-to-end tests (simulating user workflows), and performance tests. It emphasizes automated testing within a CI/CD pipeline.
-
-### 4.2 Performance Benchmarks
-
-Performance Benchmarks define specific, measurable targets and tests to evaluate system speed, throughput, and scalability. This includes measuring query latency under load, ingestion throughput, agent processing time, and resource utilization against predefined goals (e.g., p95 query latency < 100ms).
-
-### 4.3 Compliance Validation
-
-Compliance Validation ensures the system adheres to relevant standards, regulations, or organizational policies. This might involve checks for data privacy (like GDPR), security best practices, logging requirements, or specific constraints related to the data being processed.
+---
 
 ## 5. Operational Procedures
 
 The Operational Procedures section provides guidelines for deploying, managing, and maintaining the RAG engine in a production environment.
 
-### 5.1 Deployment Guidelines
-
-Deployment Guidelines outline the recommended steps and configurations for installing and setting up the system. This includes infrastructure requirements (servers, databases), dependency installation, configuration file management, initial data loading procedures, and recommended deployment strategies (e.g., Docker, Kubernetes).
-
-### 5.2 Monitoring & Maintenance
-
-Monitoring & Maintenance procedures detail the ongoing tasks required to ensure system reliability and optimal performance. This includes setting up monitoring dashboards and alerts (using tools from Section 2.8), defining regular maintenance tasks (like index rebuilding, log rotation, backups), and procedures for diagnosing and resolving common issues. CRAG's sleep cycles automate some maintenance.
-
-### 5.3 Scaling Considerations
-
-Scaling Considerations address strategies for handling increased workloads and data volumes. This includes options for vertical scaling (increasing resources on existing nodes) and horizontal scaling (adding more nodes) for different components (API servers, embedding services, vector database shards), discussing trade-offs and potential bottlenecks.
+---
 
 ## 6. Conclusion
 
 The Conclusion summarizes the key features, architectural design, and anticipated benefits of the proposed Ultra-Fast, Lightweight RAG Engine. It reiterates the value proposition, highlighting the combination of efficient retrieval, recursive self-improvement via agents, and robust cognitive self-regulation provided by the CRAG layer, positioning it as a powerful and adaptable solution for advanced information processing tasks.
+
+---
 
 ## 7. Appendices
 
@@ -820,7 +970,7 @@ oarc-rag/
 ├── .github/              # GitHub Actions workflows (CI/CD, testing)
 │   └── workflows/
 ├── configs/              # Configuration files (e.g., YAML, TOML) for system parameters, energy model, etc.
-├── data/                 # Default directory for persistent data (e.g., Parquet files from oarc-crawlers, DB files) - excluded by .gitignore
+├── data/                 # Default directory for persistent data (e.g., Parquet files from oarc-crawlers, DB files)
 ├── docs/                 # Project documentation (like this file, Cognition.md)
 ├── examples/             # Usage examples and demonstration scripts
 ├── src/                  # Main source code for the OARC-RAG engine
