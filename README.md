@@ -1,3 +1,11 @@
+<p align="center">
+  <img src="assets/cragEmoji.png" alt="OARC LOGO" width="250"/>
+</p>
+<p align="center">
+  <a href="https://discord.gg/mNeQZzBHuW"><img src="assets/Discord Button Ollama v4.png" height="48"></a>
+  <a href="https://ko-fi.com/theborch"><img src="assets/buy me a coffee button.png" height="48"></a>
+</p>
+
 # OARC-RAG
 
 A powerful Retrieval-Augmented Generation (RAG) system, designed for flexible integration with various AI applications.
